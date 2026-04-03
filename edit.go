@@ -53,8 +53,8 @@ func getQuotedMedia(client *whatsmeow.Client, v *events.Message) ([]byte, string
 	return nil, "", ""
 }
 
-// ==========================================
-// 🎨 COMMAND: .sticker / .s (NO AUTO-CUT / Original Ratio)
+// ===// ==========================================
+// 🎨 COMMAND: .sticker / .s (NO CUT + 100% TRANSPARENT BORDERS)
 // ==========================================
 func handleSticker(client *whatsmeow.Client, v *events.Message) {
 	data, mediaType, ext := getQuotedMedia(client, v)
@@ -74,18 +74,20 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 	var cmd *exec.Cmd
 	isAnimated := false
 
-	// 🌟 NO AUTO-CUT LOGIC: اب یہ تصویر/ویڈیو کو بالکل کٹ یا زوم نہیں کرے گا۔ 
-	// force_original_aspect_ratio سے یہ اوریجنل سائز رکھے گا اور pad اسے واٹس ایپ کے 512x512 میں فٹ کر دے گا۔
+	// 🌟 MAGIC LOGIC: 
+	// force_original_aspect_ratio=decrease (لمبائی/چوڑائی خراب نہیں کرے گا)
+	// format=rgba (ٹرانسپیرنسی کو ان ایبل کرے گا)
+	// color=black@0 (سائیڈوں کی جگہ کو 100% غائب کر دے گا)
 	if mediaType == "image" {
 		cmd = exec.Command("ffmpeg", "-y", "-i", tempIn,
 			"-vcodec", "libwebp",
-			"-vf", "scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:-1:-1:color=white@0.0",
+			"-vf", "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=black@0",
 			tempOut)
 	} else {
 		isAnimated = true
 		cmd = exec.Command("ffmpeg", "-y", "-i", tempIn,
 			"-vcodec", "libwebp",
-			"-vf", "fps=15,scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:-1:-1:color=white@0.0",
+			"-vf", "fps=15,scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=black@0",
 			"-loop", "0", "-preset", "default", "-an", "-vsync", "0",
 			"-q:v", "40", "-t", "00:00:10", tempOut)
 	}
@@ -110,7 +112,7 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 			MediaKey: up.MediaKey, Mimetype: proto.String("image/webp"),
 			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
 			FileLength: proto.Uint64(uint64(len(stkData))),
-			IsAnimated: proto.Bool(isAnimated), // 🔥 اینیمیشن بھی چلے گی
+			IsAnimated: proto.Bool(isAnimated),
 			ContextInfo: &waProto.ContextInfo{
 				StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message,
 			},
@@ -118,6 +120,7 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 	})
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
+
 
 // ==========================================
 // 🖼️ COMMAND: .toimg
