@@ -52,7 +52,7 @@ func getQuotedMedia(client *whatsmeow.Client, v *events.Message) ([]byte, string
 }
 
 // ==========================================
-// 🎨 COMMAND: .sticker / .s (FIXED 512x512)
+// 🎨 COMMAND: .sticker / .s (FIXED ANIMATION)
 // ==========================================
 func handleSticker(client *whatsmeow.Client, v *events.Message) {
 	data, mediaType, ext := getQuotedMedia(client, v)
@@ -70,10 +70,12 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 	defer os.Remove(tempOut)
 
 	var cmd *exec.Cmd
-	// 🛠️ FIX: WhatsApp STRICTLY requires 512x512 dimensions for stickers
+	isAnimated := false // 👈 یہاں ہم چیک کریں گے
+
 	if mediaType == "image" {
 		cmd = exec.Command("ffmpeg", "-i", tempIn, "-vcodec", "libwebp", "-vf", "scale='min(512,iw)':min'(512,ih)':force_original_aspect_ratio=decrease,fps=15, pad=512:512:-1:-1:color=white@0.0, format=rgba", "-lossless", "0", "-compression_level", "4", "-q:v", "50", "-loop", "0", "-preset", "default", "-an", "-vsync", "0", tempOut)
 	} else {
+		isAnimated = true // 👈 اگر ویڈیو ہے تو اسے True کر دیں گے
 		cmd = exec.Command("ffmpeg", "-i", tempIn, "-vcodec", "libwebp", "-vf", "scale='min(512,iw)':min'(512,ih)':force_original_aspect_ratio=decrease,fps=15, pad=512:512:-1:-1:color=white@0.0, format=rgba", "-lossless", "0", "-compression_level", "4", "-q:v", "50", "-loop", "0", "-preset", "default", "-an", "-vsync", "0", "-t", "00:00:10", tempOut)
 	}
 
@@ -100,6 +102,7 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 			MediaKey: up.MediaKey, Mimetype: proto.String("image/webp"),
 			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
 			FileLength: proto.Uint64(uint64(len(stkData))),
+			IsAnimated: proto.Bool(isAnimated), // 🔥 یہ وہ میجک لائن ہے جو مسنگ تھی!
 			ContextInfo: &waProto.ContextInfo{
 				StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message,
 			},
@@ -107,6 +110,51 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 	})
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
+
+// ==========================================
+// 🎬 COMMAND: .tovideo / .togif (FIXED Animation Check)
+// ==========================================
+func handleToVideo(client *whatsmeow.Client, v *events.Message, isGif bool) {
+	data, _, ext := getQuotedMedia(client, v)
+	if len(data) == 0 {
+		replyMessage(client, v, "❌ Failed to download sticker data. Please try another one.")
+		return
+	}
+	if ext != ".webp" {
+		replyMessage(client, v, "❌ Please reply to a Sticker.")
+		return
+	}
+	react(client, v.Info.Chat, v.Info.ID, "⏳")
+
+	tempIn := fmt.Sprintf("./data/temp_in_%d.webp", time.Now().UnixNano())
+	tempOut := fmt.Sprintf("./data/temp_out_%d.mp4", time.Now().UnixNano())
+	os.WriteFile(tempIn, data, 0644)
+	defer os.Remove(tempIn)
+	defer os.Remove(tempOut)
+
+	err := exec.Command("ffmpeg", "-i", tempIn, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", tempOut).Run()
+	if err != nil {
+		replyMessage(client, v, "❌ Failed to convert. Make sure the sticker is ACTUALLY animated!")
+		return
+	}
+
+	vidData, err := os.ReadFile(tempOut)
+	if err != nil || len(vidData) == 0 { return }
+
+	up, _ := client.Upload(context.Background(), vidData, whatsmeow.MediaVideo)
+	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
+		VideoMessage: &waProto.VideoMessage{
+			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
+			MediaKey: up.MediaKey, Mimetype: proto.String("video/mp4"),
+			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
+			FileLength: proto.Uint64(uint64(len(vidData))), GifPlayback: proto.Bool(isGif),
+			Caption: proto.String("🎨 Converted by Silent Nexus"),
+			ContextInfo: &waProto.ContextInfo{ StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message },
+		},
+	})
+	react(client, v.Info.Chat, v.Info.ID, "✅")
+}
+
 
 // ==========================================
 // 🖼️ COMMAND: .toimg (FIXED First Frame)
@@ -141,47 +189,6 @@ func handleToImg(client *whatsmeow.Client, v *events.Message) {
 			MediaKey: up.MediaKey, Mimetype: proto.String("image/jpeg"),
 			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
 			FileLength: proto.Uint64(uint64(len(imgData))), Caption: proto.String("🎨 Converted by Silent Nexus"),
-			ContextInfo: &waProto.ContextInfo{ StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message },
-		},
-	})
-	react(client, v.Info.Chat, v.Info.ID, "✅")
-}
-
-// ==========================================
-// 🎬 COMMAND: .tovideo / .togif (FIXED Codec)
-// ==========================================
-func handleToVideo(client *whatsmeow.Client, v *events.Message, isGif bool) {
-	data, _, ext := getQuotedMedia(client, v)
-	if len(data) == 0 || ext != ".webp" {
-		replyMessage(client, v, "❌ Please reply to an Animated Sticker.")
-		return
-	}
-	react(client, v.Info.Chat, v.Info.ID, "⏳")
-
-	tempIn := fmt.Sprintf("./data/temp_in_%d.webp", time.Now().UnixNano())
-	tempOut := fmt.Sprintf("./data/temp_out_%d.mp4", time.Now().UnixNano())
-	os.WriteFile(tempIn, data, 0644)
-	defer os.Remove(tempIn)
-	defer os.Remove(tempOut)
-
-	// 🛠️ FIX: WhatsApp requires libx264, yuv420p, and EVEN dimensions
-	err := exec.Command("ffmpeg", "-i", tempIn, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", tempOut).Run()
-	if err != nil {
-		replyMessage(client, v, "❌ Failed to convert. Make sure the sticker is animated.")
-		return
-	}
-
-	vidData, err := os.ReadFile(tempOut)
-	if err != nil || len(vidData) == 0 { return }
-
-	up, _ := client.Upload(context.Background(), vidData, whatsmeow.MediaVideo)
-	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
-		VideoMessage: &waProto.VideoMessage{
-			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
-			MediaKey: up.MediaKey, Mimetype: proto.String("video/mp4"),
-			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
-			FileLength: proto.Uint64(uint64(len(vidData))), GifPlayback: proto.Bool(isGif),
-			Caption: proto.String("🎨 Converted by Silent Nexus"),
 			ContextInfo: &waProto.ContextInfo{ StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message },
 		},
 	})
