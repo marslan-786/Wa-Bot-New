@@ -492,8 +492,8 @@ func handleVideoSearch(client *whatsmeow.Client, v *events.Message, query string
 	if query == "" { return }
 	react(client, v.Info.Chat, v.Info.ID, "🔍")
 
-	// پرانے بوٹ والی پرفیکٹ لاجک (--get-id)
-	cmd := exec.Command("yt-dlp", "ytsearch1:"+query, "--get-id")
+	// ہم نے --get-id کی جگہ وہی لاجک استعمال کی ہے جو handleYTS میں کام کر رہی ہے
+	cmd := exec.Command("yt-dlp", "ytsearch1:"+query, "--flat-playlist", "--print", "id")
 	out, err := cmd.CombinedOutput()
 	
 	if err != nil {
@@ -506,14 +506,18 @@ func handleVideoSearch(client *whatsmeow.Client, v *events.Message, query string
 		return
 	}
 
-	vidID := strings.TrimSpace(string(out))
-	if vidID == "" {
+	// یہاں ہم صرف پہلی لائن (ID) نکال رہے ہیں تاکہ کوئی فالتو ٹیکسٹ نہ آئے
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 0 || lines[0] == "" {
 		replyMessage(client, v, "❌ *Error:* No video found for this search.")
 		react(client, v.Info.Chat, v.Info.ID, "❌")
 		return
 	}
 
+	vidID := strings.TrimSpace(lines[0])
 	ytUrl := "https://www.youtube.com/watch?v=" + vidID
+	
+	// ڈاؤن لوڈنگ شروع کریں
 	go downloadViaAPI(client, v, ytUrl, "360p", false)
 }
 
@@ -524,8 +528,8 @@ func handlePlayMusic(client *whatsmeow.Client, v *events.Message, query string) 
 	if query == "" { return }
 	react(client, v.Info.Chat, v.Info.ID, "🔍")
 
-	// پرانے بوٹ والی پرفیکٹ لاجک (--get-id)
-	cmd := exec.Command("yt-dlp", "ytsearch1:"+query, "--get-id")
+	// یہاں بھی ہم نے --get-id کو ہٹا کر --print id کر دیا ہے
+	cmd := exec.Command("yt-dlp", "ytsearch1:"+query, "--flat-playlist", "--print", "id")
 	out, err := cmd.CombinedOutput()
 	
 	if err != nil {
@@ -538,16 +542,20 @@ func handlePlayMusic(client *whatsmeow.Client, v *events.Message, query string) 
 		return
 	}
 
-	vidID := strings.TrimSpace(string(out))
-	if vidID == "" {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 0 || lines[0] == "" {
 		replyMessage(client, v, "❌ *Error:* No audio found for this search.")
 		react(client, v.Info.Chat, v.Info.ID, "❌")
 		return
 	}
 
+	vidID := strings.TrimSpace(lines[0])
 	ytUrl := "https://www.youtube.com/watch?v=" + vidID
+
+	// ڈاؤن لوڈنگ شروع کریں
 	go downloadViaAPI(client, v, ytUrl, "mp3", true)
 }
+
 
 
 func handleYTQualityMenu(client *whatsmeow.Client, v *events.Message, ytUrl string) {
