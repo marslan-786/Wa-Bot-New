@@ -31,13 +31,9 @@ def search_tiktok(query, limit=10):
             page = context.new_page()
 
             # 2. 🔥 NETWORK INTERCEPTOR (The Magic Part)
-            # ہم ہر آنے والی ریسپانس کو چیک کریں گے
             def handle_response(response):
                 try:
-                    # اگر ریسپانس JSON ہے اور اس میں ویڈیوز ہیں
                     if "item_list" in response.url or "search_item" in response.url or "video" in response.url:
-                        # کبھی کبھی TikTok سیدھا HTML میں ڈیٹا بھیجتا ہے، کبھی JSON میں
-                        # ہم فی الحال آسان طریقہ آزماتے ہیں: HTML سے لنکس نکالنا (Backup)
                         pass
                 except:
                     pass
@@ -59,41 +55,44 @@ def search_tiktok(query, limit=10):
                 page.keyboard.press("End")
                 time.sleep(2)
 
-            # 5. 💪 BRUTE FORCE EXTRACTION (Updated Selectors)
-            # TikTok اب لنکس کو چھپاتا ہے، اس لیے ہم ہر چیز کو scan کریں گے
+            # 🚨 NEW: PRINT FULL HTML PAGE (ڈیبگنگ کے لیے پورا پیج کنسول پر پھینکیں)
+            print_debug("================ PAGE HTML START ================")
+            html_content = page.content()
+            try:
+                # Unicode ایررز سے بچنے کے لیے سیدھا stderr پر لکھ رہے ہیں
+                sys.stderr.write(html_content + "\n")
+            except UnicodeEncodeError:
+                # اگر کوئی ایموجی وغیرہ کا مسئلہ ہو تو اسے ہینڈل کر لے گا
+                sys.stderr.write(html_content.encode('utf-8', 'ignore').decode('utf-8') + "\n")
+            sys.stderr.flush()
+            print_debug("================ PAGE HTML END ================")
+
+            # 5. 💪 BRUTE FORCE EXTRACTION
             print_debug("Extracting video objects...")
             
             data = page.evaluate("""
                 () => {
                     const items = [];
-                    // TikTok Universal Video Containers
-                    // یہ وہ کلاسز ہیں جو اکثر ویڈیوز پر ہوتی ہیں
                     const candidates = document.querySelectorAll('div[data-e2e="search_top_item"], div[data-e2e="search_item"], a');
                     
                     candidates.forEach(el => {
-                        // لنک ڈھونڈیں
                         let link = el.getAttribute('href');
                         if (!link && el.tagName === 'DIV') {
                             const a = el.querySelector('a');
                             if (a) link = a.getAttribute('href');
                         }
 
-                        // اگر لنک ویڈیو کا ہے
                         if (link && link.includes('/video/')) {
-                            // ٹائٹل نکالیں
                             let title = el.innerText || "";
                             const img = el.querySelector('img');
                             if (img && img.alt && img.alt.length > title.length) title = img.alt;
                             
-                            // Absolute URL بنائیں
                             if (link.startsWith('/')) link = "https://www.tiktok.com" + link;
 
-                            // صفائی اور پش
                             title = title.replace(/\\n/g, ' ').trim();
                             if (title.length > 80) title = title.substring(0, 77) + "...";
                             if (!title) title = "TikTok Video";
 
-                            // Duplicate Check
                             if (!items.find(i => i.url === link)) {
                                 items.push({ title: title, url: link });
                             }
@@ -103,7 +102,7 @@ def search_tiktok(query, limit=10):
                 }
             """)
             
-            # فلٹر کریں (کیونکہ کبھی کبھی یوزر پروفائل لنکس بھی آ جاتے ہیں)
+            # فلٹر کریں
             filtered_results = [item for item in data if "/video/" in item['url']]
             
             print_debug(f"Found {len(filtered_results)} valid videos.")
@@ -115,7 +114,7 @@ def search_tiktok(query, limit=10):
             if 'browser' in locals():
                 browser.close()
 
-    # Final JSON Output
+    # Final JSON Output (یہ Go کو ملے گا)
     print(json.dumps(results))
 
 if __name__ == "__main__":

@@ -223,7 +223,17 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 		if isAudio {
 			args = append(commonArgs, "-f", "bestaudio/best", "--extract-audio", "--audio-format", "mp3", "--audio-quality", "192K", "-o", tempFileName, targetUrl)
 		} else {
-			args = append(commonArgs, "-f", formatArg, "--merge-output-format", "mp4", "-o", tempFileName, targetUrl)
+			// 🔥 WHATSAPP PLAYBACK FIX 🔥
+			// 1. -S "vcodec:h264" -> واٹس ایپ کے لیے لازمی H.264 کوڈیک فورس کرے گا
+			// 2. --postprocessor-args -> پکسل فارمیٹ کو موبائل سکرینز کے حساب سے سیٹ کرے گا
+			args = append(commonArgs, 
+				"-S", "vcodec:h264,res,acodec:m4a", 
+				"--postprocessor-args", "Video:-pix_fmt yuv420p", 
+				"-f", formatArg, 
+				"--merge-output-format", "mp4", 
+				"-o", tempFileName, 
+				targetUrl,
+			)
 		}
 
 		cmd := exec.Command("yt-dlp", args...)
