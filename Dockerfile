@@ -18,25 +18,31 @@ RUN go mod init bot && \
 RUN CGO_ENABLED=1 GOOS=linux go build -v -ldflags="-s -w" -o bot .
 
 # ═══════════════════════════════════════════════════════════
-# 2. Stage: Final Runtime (1TB RAM Edition)
+# 2. Stage: Final Runtime (1TB RAM Edition - Fully Equipped)
 # ═══════════════════════════════════════════════════════════
 FROM python:3.10-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1
 
-# 🛠️ سسٹم لائبریریز اور Chromium کے لیے ضروری چیزیں
+# 🛠️ سسٹم لائبریریز اور Chromium/Node.js کے لیے ضروری چیزیں
+# 🔥 CRITICAL FIX: 'nodejs' اور 'npm' یہاں ایڈ کر دیے گئے ہیں
 RUN apt-get update && apt-get install -y \
     ffmpeg curl sqlite3 libsqlite3-0 ca-certificates python3-pip \
+    nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
-# 🚀 yt-dlp انسٹالیشن
+# 🛠️ CRITICAL FIX 2: yt-dlp needs 'node', not 'nodejs' command
+RUN ln -sf /usr/bin/nodejs /usr/local/bin/node
+
+# 🚀 yt-dlp انسٹالیشن (Latest)
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp
 
-# 🐍 Python Packages (Playwright واپس آ گیا ہے)
+# 🐍 Python Packages (Playwright for TikTok search)
 RUN pip3 install --no-cache-dir requests playwright
 
-# 🌍 Playwright Browsers انسٹالیشن (یہ ہیوی ہے لیکن آپ کے پاس ریم کی کمی نہیں)
+# 🌍 Playwright Browsers انسٹالیشن
+# یہ TikTok کے کیپچا اور بلاکس کو بائی پاس کرنے کے لیے Chromium انسٹال کرتا ہے
 RUN playwright install --with-deps chromium
 
 WORKDIR /app
@@ -46,6 +52,7 @@ COPY --from=go-builder /app/bot ./bot
 COPY tiktok_search.py ./tiktok_search.py
 COPY index.html ./index.html
 
+# فولڈر بنائیں
 RUN mkdir -p data
 
 ENV PORT=8080
