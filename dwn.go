@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"bufio"
+	"net/url"
 //	"bytes"
 
 	"go.mau.fi/whatsmeow"
@@ -124,46 +126,34 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mode string, optionalFormat ...string) {
 	react(client, v.Info.Chat, v.Info.ID, "⬇️")
 
-	// 1. ریزولوشن سیٹ کریں (ویڈیو کے لیے mp4 اور آڈیو کے لیے mp3)
-	resolution := "mp4"
 	isAudio := false
 	if mode == "audio" {
-		resolution = "mp3"
 		isAudio = true
 	}
 
-	httpClient := &http.Client{Timeout: 5 * time.Minute}
-
-	// 2. آپ کی نئی دھماکے دار API کو کال کریں
-	apiUrl := fmt.Sprintf("https://all-dwn-api-production.up.railway.app/api/download?url=%s&resolution=%s", targetUrl, resolution)
-	resp, err := httpClient.Get(apiUrl)
-	if err != nil { 
-		fmt.Printf("❌ [API ERROR]: %v\n", err)
-		replyMessage(client, v, "❌ *System Error:* API connection failed.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
-		return 
-	}
-	defer resp.Body.Close()
-
-	var apiRes APIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiRes); err != nil || !apiRes.Success || apiRes.DownloadURL == "" {
-		fmt.Printf("❌ [JSON/SUCCESS ERROR]: %v | Res: %+v\n", err, apiRes)
-		replyMessage(client, v, "❌ *Download Failed:* API could not extract this link.")
+	// 1. ڈائریکٹ اپنا انٹرنل اسکریپر فنکشن کال کرو
+	title, downloadURL, err := extractVidsSaveURL(targetUrl, mode)
+	if err != nil || downloadURL == "" {
+		fmt.Printf("❌ [EXTRACTION ERROR]: %v\n", err)
+		replyMessage(client, v, "❌ *Download Failed:* System could not extract this link.")
 		react(client, v.Info.Chat, v.Info.ID, "❌")
 		return
 	}
 
-	// 3. فائل ڈاؤنلوڈ کرنا شروع کریں
-	fileResp, err := httpClient.Get(apiRes.DownloadURL)
+	httpClient := &http.Client{Timeout: 5 * time.Minute}
+
+	// 2. فائل ڈاؤنلوڈ کرنا شروع کریں
+	fileResp, err := httpClient.Get(downloadURL)
 	if err != nil { 
-		replyMessage(client, v, "❌ *Error:* Failed to stream media from API.")
+		replyMessage(client, v, "❌ *Error:* Failed to stream media from server.")
 		react(client, v.Info.Chat, v.Info.ID, "❌")
 		return 
 	}
 	defer fileResp.Body.Close()
 
+	// VidsSave والے آڈیو کے لیے اکثر .m4a دیتے ہیں، اسے ہینڈل کر لیا
 	ext := ".mp4"
-	if isAudio { ext = ".mp3" }
+	if isAudio { ext = ".m4a" }
 	tempFileName := fmt.Sprintf("./data/temp_%d%s", time.Now().UnixNano(), ext)
 	
 	outFile, err := os.Create(tempFileName)
@@ -181,14 +171,14 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 	// فنکشن کے آخر میں صفائی
 	defer os.Remove(tempFileName)
 
-	// 4. سائز چیک کریں اور اگر بڑی ہو تو کاٹیں (Reuse existing logic)
+	// 3. سائز چیک کریں اور اگر بڑی ہو تو کاٹیں (Reuse existing logic)
 	fileInfo, err := os.Stat(tempFileName)
 	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 	
 	fileSize := fileInfo.Size()
 	var filesToSend []string
 
-	if fileSize > MaxWhatsAppSize && !isAudio {
+	if fileSize > int64(MaxWhatsAppSize) && !isAudio {
 		react(client, v.Info.Chat, v.Info.ID, "✂️") 
 		parts, err := splitVideoSmart(tempFileName, SafeMarginMB)
 		if err != nil || len(parts) == 0 {
@@ -202,9 +192,9 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 
 	react(client, v.Info.Chat, v.Info.ID, "📤")
 
-	// 5. فائنل سینڈنگ (آپ کا پرانا پکا فنکشن)
+	// 4. فائنل سینڈنگ
 	for i, filePath := range filesToSend {
-		uploadAndSendFile(client, v, filePath, apiRes.Title, isAudio, i+1, len(filesToSend))
+		uploadAndSendFile(client, v, filePath, title, isAudio, i+1, len(filesToSend))
 		if filePath != tempFileName {
 			os.Remove(filePath)
 		}
@@ -212,6 +202,7 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
+
 
 
 // ==========================================
@@ -672,4 +663,134 @@ func handleUniversalDownload(client *whatsmeow.Client, v *events.Message, url st
 
 	// 2. ماسٹر ڈاؤنلوڈر کو اوریجنل لنک بھیج دیں
 	go downloadAndSend(client, v, url, mode)
+}
+
+// extractVidsSaveURL سارا اسکریپنگ کا کام کرے گا
+func extractVidsSaveURL(videoURL string, mode string) (string, string, error) {
+	resolution := "mp4"
+	if mode == "audio" {
+		resolution = "mp3"
+	}
+
+	// 1. Parse API
+	parseData := url.Values{}
+	parseData.Set("auth", "20250901majwlqo")
+	parseData.Set("domain", "api-ak.vidssave.com")
+	parseData.Set("origin", "source")
+	parseData.Set("link", videoURL)
+
+	resp, err := http.PostForm("https://api.vidssave.com/api/contentsite_api/media/parse", parseData)
+	if err != nil {
+		return "", "", fmt.Errorf("parse API failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var parseResp map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&parseResp); err != nil {
+		return "", "", fmt.Errorf("failed to decode parse JSON: %v", err)
+	}
+
+	data, ok := parseResp["data"].(map[string]interface{})
+	if !ok {
+		return "", "", fmt.Errorf("invalid parse response format")
+	}
+	title, _ := data["title"].(string)
+	resources, _ := data["resources"].([]interface{})
+
+	// Find resource content
+	var resourceContent string
+	for _, res := range resources {
+		rMap, ok := res.(map[string]interface{})
+		if !ok { continue }
+		
+		quality, _ := rMap["quality"].(string)
+		format, _ := rMap["format"].(string)
+		format = strings.ToLower(format)
+		
+		if resolution == "mp3" && format == "mp3" {
+			resourceContent, _ = rMap["resource_content"].(string)
+			break
+		} else if strings.Contains(quality, resolution) || format == resolution {
+			resourceContent, _ = rMap["resource_content"].(string)
+			break
+		}
+	}
+
+	// Default fallback
+	if resourceContent == "" && len(resources) > 0 {
+		rMap := resources[0].(map[string]interface{})
+		resourceContent, _ = rMap["resource_content"].(string)
+	}
+
+	if resourceContent == "" {
+		return "", "", fmt.Errorf("no suitable resource found")
+	}
+
+	// 2. Download Task API
+	dlData := url.Values{}
+	dlData.Set("auth", "20250901majwlqo")
+	dlData.Set("domain", "api-ak.vidssave.com")
+	dlData.Set("request", resourceContent)
+	dlData.Set("no_encrypt", "1")
+
+	dResp, err := http.PostForm("https://api.vidssave.com/api/contentsite_api/media/download", dlData)
+	if err != nil {
+		return "", "", fmt.Errorf("download task API failed: %v", err)
+	}
+	defer dResp.Body.Close()
+
+	var dlResp map[string]interface{}
+	json.NewDecoder(dResp.Body).Decode(&dlResp)
+	taskData, ok := dlResp["data"].(map[string]interface{})
+	if !ok {
+		return "", "", fmt.Errorf("task_id not found")
+	}
+	taskID, _ := taskData["task_id"].(string)
+
+	// 3. SSE Query (Wait for Success)
+	queryURL := fmt.Sprintf("https://api.vidssave.com/sse/contentsite_api/media/download_query?auth=20250901majwlqo&domain=api-ak.vidssave.com&task_id=%s&download_domain=vidssave.com&origin=content_site", url.QueryEscape(taskID))
+	
+	sseResp, err := http.Get(queryURL)
+	if err != nil {
+		return "", "", fmt.Errorf("SSE query failed: %v", err)
+	}
+	defer sseResp.Body.Close()
+	
+	scanner := bufio.NewScanner(sseResp.Body)
+	var downloadLink string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data: ") {
+			var eventData map[string]interface{}
+			json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &eventData)
+			if eventData["status"] == "success" {
+				downloadLink, _ = eventData["download_link"].(string)
+				break
+			}
+		}
+	}
+
+	if downloadLink == "" {
+		return "", "", fmt.Errorf("failed to get download link from SSE")
+	}
+
+	// 4. Follow Redirect to get final signed link
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // Don't auto-follow
+		},
+	}
+	redirReq, _ := http.NewRequest("GET", downloadLink, nil)
+	redirResp, err := client.Do(redirReq)
+	if err != nil {
+		return "", "", fmt.Errorf("redirect request failed: %v", err)
+	}
+	defer redirResp.Body.Close()
+
+	finalURL := redirResp.Header.Get("Location")
+	if finalURL == "" {
+		return "", "", fmt.Errorf("location header missing")
+	}
+
+	return title, finalURL, nil
 }
