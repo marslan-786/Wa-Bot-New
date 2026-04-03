@@ -578,53 +578,79 @@ func handleVideoSearch(client *whatsmeow.Client, v *events.Message, query string
 }
 
 // 💎 پریمیم کارڈ میکر (ہیلپر)
-func sendPremiumCard(client *whatsmeow.Client, v *events.Message, title, site, info string) {
-	card := fmt.Sprintf(`╔══════════════════════╗
-║ ✨ %s DOWNLOADER
-╠══════════════════════╣
-║ 📝 Title: %s
-║ 🌐 Site: %s
-╠══════════════════════╣
-║ ⏳ Status: Processing...
-╚══════════════════════╝
-%s`, strings.ToUpper(site), title, site, info)
-	replyMessage(client, v, card)
-}
-
+// ==========================================
+// 🌐 UNIVERSAL MEDIA DOWNLOADER (Silent Router)
+// ==========================================
 func handleUniversalDownload(client *whatsmeow.Client, v *events.Message, url string, cmd string) {
 	if url == "" {
 		replyMessage(client, v, "❌ *Error:* Please provide a valid link.")
 		return
 	}
 
-	var platformName, emoji, actionText, mode string
-	mode = "video" 
-
-	switch cmd {
-	case "fb", "facebook":
-		platformName, emoji, actionText = "Facebook", "💙", "🎥 Extracting High Quality Content..."
-	case "ig", "insta", "instagram":
-		platformName, emoji, actionText = "Instagram", "📸", "📸 Capturing Media..."
-	case "tw", "x", "twitter":
-		platformName, emoji, actionText = "Twitter/X", "🐦", "🐦 Speeding through X servers..."
-	case "pin", "pinterest":
-		platformName, emoji, actionText = "Pinterest", "📌", "📌 Extracting Media Asset..."
-	case "snap", "snapchat":
-		platformName, emoji, actionText = "Snapchat", "👻", "👻 Capturing Snap Spotlight..."
-	case "reddit":
-		platformName, emoji, actionText = "Reddit", "👽", "👽 Merging Audio & Video..."
-	case "dm", "dailymotion":
-		platformName, emoji, actionText = "DailyMotion", "📺", "📺 Packing Video Stream..."
-	case "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp":
-		platformName = strings.ToUpper(cmd[:1]) + strings.ToLower(cmd[1:])
-		emoji, actionText = "🎵", "🎧 Ripping HQ Audio..."
-		mode = "audio"
-	default:
-		platformName = strings.ToUpper(cmd[:1]) + strings.ToLower(cmd[1:])
-		emoji, actionText = "🚀", "🚀 Fetching Media..."
+	// 🛠️ FIX: اگر اسنیپ چیٹ کا شارٹ لنک ہے تو اسے Expand کر لیں
+	if strings.Contains(url, "snapchat.com/t/") || strings.Contains(url, "pin.it/") {
+		url = expandURL(url)
 	}
 
+	var emoji, mode string
+	mode = "video" // ڈیفالٹ موڈ ویڈیو ہے
+    
+    // ... باقی سارا آپ کا پرانا کوڈ وہی رہے گا ...
+
+
+	// کمانڈ کے حساب سے صرف ایموجی اور موڈ سیٹ کریں
+	switch cmd {
+	case "fb", "facebook":
+		emoji = "💙"
+	case "ig", "insta", "instagram":
+		emoji = "📸"
+	case "tw", "x", "twitter":
+		emoji = "🐦"
+	case "pin", "pinterest":
+		emoji = "📌"
+	case "snap", "snapchat":
+		emoji = "👻"
+	case "reddit":
+		emoji = "👽"
+	case "dm", "dailymotion":
+		emoji = "📺"
+	case "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp":
+		// یہ سارے میوزک پلیٹ فارمز ہیں اس لیے ان کا موڈ 'audio' کر دیں
+		emoji = "🎵"
+		mode = "audio"
+	default:
+		emoji = "🚀"
+	}
+
+	// 1. صرف ری ایکشن دیں (کوئی پریمیم کارڈ یا میسج نہیں جائے گا)
 	react(client, v.Info.Chat, v.Info.ID, emoji)
-	sendPremiumCard(client, v, platformName+" Media", platformName, actionText)
+
+	// 2. ماسٹر ڈاؤنلوڈر کو فائل لانے کے لیے خاموشی سے بھیج دیں
 	go downloadAndSend(client, v, url, mode)
+}
+
+// ==========================================
+// 🔗 URL EXPANDER HELPER (For Snapchat/Pinterest)
+// ==========================================
+func expandURL(shortURL string) string {
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+	req, err := http.NewRequest("GET", shortURL, nil)
+	if err != nil {
+		return shortURL
+	}
+	
+	// براؤزر کا روپ دھاریں تاکہ 404 نہ آئے
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	
+	resp, err := client.Do(req)
+	if err != nil {
+		return shortURL
+	}
+	defer resp.Body.Close()
+	
+	// یہ فائنل اور اصلی لنک واپس کر دے گا (e.g., snapchat.com/spotlight/...)
+	return resp.Request.URL.String()
 }
