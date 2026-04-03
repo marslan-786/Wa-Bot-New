@@ -124,6 +124,7 @@ func main() {
 
 	initDB()
 	initSettingsDB()
+	initGroupDB()
 	RunAllSessions()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

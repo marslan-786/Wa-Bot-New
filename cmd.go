@@ -210,6 +210,56 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		react(client, v.Info.Chat, v.Info.ID, "🔗")
 		go handlePair(client, v, fullArgs)
 		
+	// 🛡️ GROUP ADMIN COMMANDS
+	case "antilink":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleGroupToggle(client, v, "Anti-Link", "antilink", fullArgs)
+	case "antipic":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleGroupToggle(client, v, "Anti-Picture", "antipic", fullArgs)
+	case "antivideo":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleGroupToggle(client, v, "Anti-Video", "antivideo", fullArgs)
+	case "antisticker":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleGroupToggle(client, v, "Anti-Sticker", "antisticker", fullArgs)
+	case "welcome":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleGroupToggle(client, v, "Welcome Message", "welcome", fullArgs)
+	case "antidelete":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleGroupToggle(client, v, "Anti-Delete", "antidelete", fullArgs)
+
+	case "kick":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleKick(client, v, fullArgs)
+	case "add":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleAdd(client, v, fullArgs)
+	case "promote":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handlePromote(client, v, fullArgs)
+	case "demote":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleDemote(client, v, fullArgs)
+	case "group":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleGroupState(client, v, fullArgs)
+	case "del":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleDel(client, v)
+	case "tagall":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleTags(client, v, false, fullArgs)
+	case "hidetag":
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleTags(client, v, true, fullArgs)
+
+	// 🛠️ UTILITY COMMANDS (Publicly Available)
+	case "vv":
+		react(client, v.Info.Chat, v.Info.ID, "👀")
+		go handleVV(client, v)
+		
     
 	case "fb", "facebook", "ig", "insta", "instagram", "tw", "x", "twitter", "pin", "pinterest", "threads", "snap", "snapchat", "reddit", "dm", "dailymotion", "vimeo", "rumble", "bilibili", "douyin", "kwai", "bitchute", "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp", "imgur", "giphy", "flickr", "9gag", "ifunny":
 	    react(client, v.Info.Chat, v.Info.ID, "🪩")
@@ -341,36 +391,40 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
  │    _Connect New Bot Session_
  │
  ╰──────────────────────╯
+ 
+ ╭── ✦ [ 🛡️ 𝗚𝗥𝗢𝗨𝗣 𝗠𝗘𝗡𝗨 🛡️ ] ──╮
+ │ 
+ │ ➭ *%[3]santilink* [on/off]
+ │ ➭ *%[3]santipic* [on/off]
+ │ ➭ *%[3]santivideo* [on/off]
+ │ ➭ *%[3]santisticker* [on/off]
+ │ ➭ *%[3]swelcome* [on/off]
+ │ ➭ *%[3]santidelete* [on/off]
+ │ ➭ *%[3]skick* [@tag/reply]
+ │ ➭ *%[3]sadd* [number]
+ │ ➭ *%[3]spromote* [@tag/reply]
+ │ ➭ *%[3]sdemote* [@tag/reply]
+ │ ➭ *%[3]stagall* [text]
+ │ ➭ *%[3]shidetag* [text]
+ │ ➭ *%[3]sgroup* [open/close]
+ │ ➭ *%[3]sdel* [reply]
+ │ 
+ ╰──────────────────────╯
+
+ ╭── ✦ [ 🛠️ 𝗨𝗧𝗜𝗟𝗜𝗧𝗬 ] ──╮
+ │ 
+ │ ➭ *%[3]svv* [reply to media]
+ │    _Anti View-Once Media Extract_
+ │ 
+ ╰──────────────────────╯
+ 
 
      ⚡ ━━━ ✦ 💖 𝙎𝙞𝙡𝙚𝙣𝙩 𝙃𝙖𝙘𝙠𝙚𝙧𝙨 💖 ✦ ━━━ ⚡`, 
 	strings.ToUpper(settings.Mode), uptimeStr, settings.Prefix)
 
-	// 🖼️ 1. تصویر لوڈ کریں
-	imageData, err := os.ReadFile("pic.png")
-	if err != nil {
-		fmt.Printf("⚠️ Image error: %v\n", err)
-		replyMessage(client, v, menu) // اگر تصویر نہ ملے تو صرف ٹیکسٹ بھیج دے
-		return
-	}
-
-	// 📤 2. تصویر واٹس ایپ پر اپلوڈ کریں
-	resp, err := client.Upload(context.Background(), imageData, whatsmeow.MediaImage)
-	if err != nil {
-		replyMessage(client, v, menu)
-		return
-	}
-
-	// 🛡️ 3. ویریفائیڈ اسٹیٹس اور تصویر کے ساتھ میسج بھیجیں (Status Broadcast Fix)
 	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
-		ImageMessage: &waProto.ImageMessage{
-			URL:           proto.String(resp.URL),
-			DirectPath:    proto.String(resp.DirectPath),
-			MediaKey:      resp.MediaKey,
-			Mimetype:      proto.String("image/png"),
-			FileEncSHA256: resp.FileEncSHA256,
-			FileSHA256:    resp.FileSHA256,
-			FileLength:    proto.Uint64(uint64(len(imageData))),
-			Caption:       proto.String(menu),
+		ExtendedTextMessage: &waProto.ExtendedTextMessage{
+			Text: proto.String(menu),
 			ContextInfo: &waProto.ContextInfo{
 				StanzaID:      proto.String(v.Info.ID),
 				Participant:   proto.String("0@s.whatsapp.net"), // 👈 ویریفائیڈ لک کے لیے
@@ -428,7 +482,6 @@ func replyMessage(client *whatsmeow.Client, v *events.Message, text string) stri
 	}
 	return ""
 }
-
 // ==========================================
 // 🔗 COMMAND: .pair (Public Pairing)
 // ==========================================
@@ -480,8 +533,12 @@ func handlePair(client *whatsmeow.Client, v *events.Message, args string) {
 		formattedCode = code[:4] + "-" + code[4:]
 	}
 
-	successMsg := fmt.Sprintf("✅ *PAIRING CODE GENERATED*\n\n📱 *Phone:* +%s\n🔢 *Code:* %s\n\n_1. Open WhatsApp on target phone_\n_2. Go to Linked Devices -> Link a Device_\n_3. Select 'Link with phone number instead'_\n_4. Enter the code above_\n\n⚠️ _This code expires in 2 minutes._", phone, formattedCode)
-	
+	// 7. پہلا میسج: ہدایات اور نیچے کی طرف اشارہ
+	successMsg := fmt.Sprintf("✅ *PAIRING CODE GENERATED*\n\n📱 *Phone:* +%s\n\n_1. Open WhatsApp on target phone_\n_2. Go to Linked Devices -> Link a Device_\n_3. Select 'Link with phone number instead'_\n_4. Enter the code below_ 👇\n\n⚠️ _This code expires in 2 minutes._", phone)
 	replyMessage(client, v, successMsg)
+	
+	// 8. دوسرا میسج: صرف پیئرنگ کوڈ (ڈائریکٹ کاپی کرنے کے لیے)
+	replyMessage(client, v, formattedCode)
+	
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
