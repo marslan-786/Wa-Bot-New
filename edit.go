@@ -52,7 +52,7 @@ func getQuotedMedia(client *whatsmeow.Client, v *events.Message) ([]byte, string
 }
 
 // ==========================================
-// 🎨 COMMAND: .sticker / .s (FIXED ANIMATION)
+// 🎨 COMMAND: .sticker / .s (NO AUTO-CUT / Original Ratio)
 // ==========================================
 func handleSticker(client *whatsmeow.Client, v *events.Message) {
 	data, mediaType, ext := getQuotedMedia(client, v)
@@ -70,13 +70,22 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 	defer os.Remove(tempOut)
 
 	var cmd *exec.Cmd
-	isAnimated := false // 👈 یہاں ہم چیک کریں گے
+	isAnimated := false
 
+	// 🌟 NO AUTO-CUT LOGIC: اب یہ تصویر/ویڈیو کو بالکل کٹ یا زوم نہیں کرے گا۔ 
+	// force_original_aspect_ratio سے یہ اوریجنل سائز رکھے گا اور pad اسے واٹس ایپ کے 512x512 میں فٹ کر دے گا۔
 	if mediaType == "image" {
-		cmd = exec.Command("ffmpeg", "-i", tempIn, "-vcodec", "libwebp", "-vf", "scale='min(512,iw)':min'(512,ih)':force_original_aspect_ratio=decrease,fps=15, pad=512:512:-1:-1:color=white@0.0, format=rgba", "-lossless", "0", "-compression_level", "4", "-q:v", "50", "-loop", "0", "-preset", "default", "-an", "-vsync", "0", tempOut)
+		cmd = exec.Command("ffmpeg", "-y", "-i", tempIn,
+			"-vcodec", "libwebp",
+			"-vf", "scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:-1:-1:color=white@0.0",
+			tempOut)
 	} else {
-		isAnimated = true // 👈 اگر ویڈیو ہے تو اسے True کر دیں گے
-		cmd = exec.Command("ffmpeg", "-i", tempIn, "-vcodec", "libwebp", "-vf", "scale='min(512,iw)':min'(512,ih)':force_original_aspect_ratio=decrease,fps=15, pad=512:512:-1:-1:color=white@0.0, format=rgba", "-lossless", "0", "-compression_level", "4", "-q:v", "50", "-loop", "0", "-preset", "default", "-an", "-vsync", "0", "-t", "00:00:10", tempOut)
+		isAnimated = true
+		cmd = exec.Command("ffmpeg", "-y", "-i", tempIn,
+			"-vcodec", "libwebp",
+			"-vf", "fps=15,scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:-1:-1:color=white@0.0",
+			"-loop", "0", "-preset", "default", "-an", "-vsync", "0",
+			"-q:v", "40", "-t", "00:00:10", tempOut)
 	}
 
 	if err := cmd.Run(); err != nil {
@@ -91,10 +100,7 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 	}
 
 	up, err := client.Upload(context.Background(), stkData, whatsmeow.MediaImage)
-	if err != nil {
-		replyMessage(client, v, "❌ Upload to WhatsApp Servers failed.")
-		return
-	}
+	if err != nil { return }
 
 	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
 		StickerMessage: &waProto.StickerMessage{
@@ -102,7 +108,7 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 			MediaKey: up.MediaKey, Mimetype: proto.String("image/webp"),
 			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
 			FileLength: proto.Uint64(uint64(len(stkData))),
-			IsAnimated: proto.Bool(isAnimated), // 🔥 یہ وہ میجک لائن ہے جو مسنگ تھی!
+			IsAnimated: proto.Bool(isAnimated), // 🔥 اینیمیشن بھی چلے گی
 			ContextInfo: &waProto.ContextInfo{
 				StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message,
 			},
@@ -112,33 +118,85 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 }
 
 // ==========================================
-// 🎬 COMMAND: .tovideo / .togif (FIXED Animation Check)
+// 🖼️ COMMAND: .toimg
 // ==========================================
-func handleToVideo(client *whatsmeow.Client, v *events.Message, isGif bool) {
+func handleToImg(client *whatsmeow.Client, v *events.Message) {
 	data, _, ext := getQuotedMedia(client, v)
-	if len(data) == 0 {
-		replyMessage(client, v, "❌ Failed to download sticker data. Please try another one.")
-		return
-	}
-	if ext != ".webp" {
+	if len(data) == 0 || ext != ".webp" {
 		replyMessage(client, v, "❌ Please reply to a Sticker.")
 		return
 	}
 	react(client, v.Info.Chat, v.Info.ID, "⏳")
 
-	tempIn := fmt.Sprintf("./data/temp_in_%d.webp", time.Now().UnixNano())
-	tempOut := fmt.Sprintf("./data/temp_out_%d.mp4", time.Now().UnixNano())
+	tempIn := fmt.Sprintf("./data/in_%d.webp", time.Now().UnixNano())
+	tempOut := fmt.Sprintf("./data/out_%d.png", time.Now().UnixNano()) // 🌟 PNG transparency بچانے کے لیے
 	os.WriteFile(tempIn, data, 0644)
 	defer os.Remove(tempIn)
 	defer os.Remove(tempOut)
 
-	err := exec.Command("ffmpeg", "-i", tempIn, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", tempOut).Run()
-	if err != nil {
-		replyMessage(client, v, "❌ Failed to convert. Make sure the sticker is ACTUALLY animated!")
+	exec.Command("ffmpeg", "-y", "-i", tempIn, output).Run()
+
+	imgData, err := os.ReadFile(tempOut)
+	if err != nil || len(imgData) == 0 { return }
+
+	up, _ := client.Upload(context.Background(), imgData, whatsmeow.MediaImage)
+	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
+		ImageMessage: &waProto.ImageMessage{
+			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
+			MediaKey: up.MediaKey, Mimetype: proto.String("image/png"),
+			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
+			FileLength: proto.Uint64(uint64(len(imgData))), Caption: proto.String("🎨 Converted by Silent Nexus"),
+			ContextInfo: &waProto.ContextInfo{ StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message },
+		},
+	})
+	react(client, v.Info.Chat, v.Info.ID, "✅")
+}
+
+// ==========================================
+// 🎬 COMMAND: .tovideo / .togif (ImageMagick + FFmpeg Logic)
+// ==========================================
+func handleToVideo(client *whatsmeow.Client, v *events.Message, isGif bool) {
+	data, _, ext := getQuotedMedia(client, v)
+	if len(data) == 0 || ext != ".webp" {
+		replyMessage(client, v, "❌ Please reply to an Animated Sticker.")
+		return
+	}
+	react(client, v.Info.Chat, v.Info.ID, "⏳")
+
+	inputWebP := fmt.Sprintf("./data/in_%d.webp", time.Now().UnixNano())
+	tempGif := fmt.Sprintf("./data/temp_%d.gif", time.Now().UnixNano())
+	outputMp4 := fmt.Sprintf("./data/out_%d.mp4", time.Now().UnixNano())
+
+	os.WriteFile(inputWebP, data, 0644)
+	defer os.Remove(inputWebP)
+	defer os.Remove(tempGif)
+	defer os.Remove(outputMp4)
+
+	// 🌟 STEP 1: ImageMagick کے ذریعے WebP کو GIF میں تبدیل کریں (Animation بچانے کے لیے)
+	cmdConvert := exec.Command("convert", inputWebP, "-coalesce", tempGif)
+	if err := cmdConvert.Run(); err != nil {
+		replyMessage(client, v, "❌ Failed to parse sticker animation. Ensure ImageMagick is installed.")
 		return
 	}
 
-	vidData, err := os.ReadFile(tempOut)
+	// 🌟 STEP 2: اب GIF کو FFmpeg کے ذریعے MP4 بنائیں
+	cmd := exec.Command("ffmpeg", "-y",
+		"-i", tempGif,
+		"-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
+		"-c:v", "libx264",
+		"-preset", "faster",
+		"-crf", "26",
+		"-movflags", "+faststart",
+		"-pix_fmt", "yuv420p",
+		"-t", "10",
+		outputMp4)
+	
+	if err := cmd.Run(); err != nil {
+		replyMessage(client, v, "❌ Graphics Engine failed to render video.")
+		return
+	}
+
+	vidData, err := os.ReadFile(outputMp4)
 	if err != nil || len(vidData) == 0 { return }
 
 	up, _ := client.Upload(context.Background(), vidData, whatsmeow.MediaVideo)
@@ -149,46 +207,6 @@ func handleToVideo(client *whatsmeow.Client, v *events.Message, isGif bool) {
 			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
 			FileLength: proto.Uint64(uint64(len(vidData))), GifPlayback: proto.Bool(isGif),
 			Caption: proto.String("🎨 Converted by Silent Nexus"),
-			ContextInfo: &waProto.ContextInfo{ StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message },
-		},
-	})
-	react(client, v.Info.Chat, v.Info.ID, "✅")
-}
-
-
-// ==========================================
-// 🖼️ COMMAND: .toimg (FIXED First Frame)
-// ==========================================
-func handleToImg(client *whatsmeow.Client, v *events.Message) {
-	data, _, ext := getQuotedMedia(client, v)
-	if len(data) == 0 || ext != ".webp" {
-		replyMessage(client, v, "❌ Please reply to a Sticker.")
-		return
-	}
-	react(client, v.Info.Chat, v.Info.ID, "⏳")
-
-	tempIn := fmt.Sprintf("./data/temp_in_%d.webp", time.Now().UnixNano())
-	tempOut := fmt.Sprintf("./data/temp_out_%d.jpg", time.Now().UnixNano())
-	os.WriteFile(tempIn, data, 0644)
-	defer os.Remove(tempIn)
-	defer os.Remove(tempOut)
-
-	// 🛠️ FIX: -vframes 1 ensures it works even if the sticker is animated
-	if err := exec.Command("ffmpeg", "-i", tempIn, "-vframes", "1", "-q:v", "2", tempOut).Run(); err != nil {
-		replyMessage(client, v, "❌ Processing failed.")
-		return
-	}
-
-	imgData, err := os.ReadFile(tempOut)
-	if err != nil || len(imgData) == 0 { return }
-
-	up, _ := client.Upload(context.Background(), imgData, whatsmeow.MediaImage)
-	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
-		ImageMessage: &waProto.ImageMessage{
-			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
-			MediaKey: up.MediaKey, Mimetype: proto.String("image/jpeg"),
-			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
-			FileLength: proto.Uint64(uint64(len(imgData))), Caption: proto.String("🎨 Converted by Silent Nexus"),
 			ContextInfo: &waProto.ContextInfo{ StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message },
 		},
 	})
