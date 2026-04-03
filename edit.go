@@ -120,6 +120,9 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 // ==========================================
 // 🖼️ COMMAND: .toimg
 // ==========================================
+// ==========================================
+// 🖼️ COMMAND: .toimg
+// ==========================================
 func handleToImg(client *whatsmeow.Client, v *events.Message) {
 	data, _, ext := getQuotedMedia(client, v)
 	if len(data) == 0 || ext != ".webp" {
@@ -134,7 +137,8 @@ func handleToImg(client *whatsmeow.Client, v *events.Message) {
 	defer os.Remove(tempIn)
 	defer os.Remove(tempOut)
 
-	exec.Command("ffmpeg", "-y", "-i", tempIn, output).Run()
+	// 🛠️ FIX: output کی جگہ tempOut کر دیا گیا ہے
+	exec.Command("ffmpeg", "-y", "-i", tempIn, tempOut).Run()
 
 	imgData, err := os.ReadFile(tempOut)
 	if err != nil || len(imgData) == 0 { return }
@@ -151,6 +155,7 @@ func handleToImg(client *whatsmeow.Client, v *events.Message) {
 	})
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
+
 
 // ==========================================
 // 🎬 COMMAND: .tovideo / .togif (ImageMagick + FFmpeg Logic)
