@@ -272,3 +272,31 @@ func handleVV(client *whatsmeow.Client, v *events.Message) {
 	react(client, v.Info.Chat, v.Info.ID, "🚀")
 	client.SendMessage(context.Background(), v.Info.Chat, &msg)
 }
+// ==========================================
+// 👑 GROUP ADMIN CHECKER FUNCTION
+// ==========================================
+func isGroupAdmin(client *whatsmeow.Client, v *events.Message) bool {
+	// 1. اگر میسج پرائیویٹ چیٹ کا ہے، تو ظاہری بات ہے وہاں کوئی ایڈمن نہیں ہوتا
+	if !strings.Contains(v.Info.Chat.String(), "@g.us") {
+		return false
+	}
+
+	// 2. گروپ کی انفارمیشن حاصل کریں
+	groupInfo, err := client.GetGroupInfo(context.Background(), v.Info.Chat)
+	if err != nil {
+		return false
+	}
+
+	// 3. میسج بھیجنے والے کی کلین آئی ڈی نکالیں
+	senderNum := v.Info.Sender.ToNonAD().User
+
+	// 4. چیک کریں کہ کیا بھیجنے والا لسٹ میں ایڈمن ہے؟
+	for _, participant := range groupInfo.Participants {
+		if participant.JID.User == senderNum && (participant.IsAdmin || participant.IsSuperAdmin) {
+			return true // ہاں، یہ بندہ ایڈمن ہے!
+		}
+	}
+
+	// اگر ایڈمن نہیں ملا تو فالس (False)
+	return false
+}
