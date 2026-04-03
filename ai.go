@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"context"
+//	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -187,4 +187,21 @@ func HandleAIChatReply(client *whatsmeow.Client, v *events.Message, bodyClean st
 		}
 	}
 	return false
+}
+
+// ==========================================
+// 🛠️ UTILITY: ID CLEANER
+// ==========================================
+func getCleanID(jidStr string) string {
+	if jidStr == "" { return "unknown" }
+	parts := strings.Split(jidStr, "@")
+	if len(parts) == 0 { return "unknown" }
+	userPart := parts[0]
+	if strings.Contains(userPart, ":") {
+		userPart = strings.Split(userPart, ":")[0]
+	}
+	if strings.Contains(userPart, ".") {
+		userPart = strings.Split(userPart, ".")[0]
+	}
+	return strings.TrimSpace(userPart)
 }

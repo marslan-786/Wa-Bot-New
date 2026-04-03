@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"bytes"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
