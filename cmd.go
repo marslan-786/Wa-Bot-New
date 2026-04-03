@@ -302,6 +302,32 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	case "id":
 		react(client, v.Info.Chat, v.Info.ID, "🪪")
 		go handleID(client, v)
+		
+   	// ✨ AI TOOLS COMMANDS
+	case "img", "image":
+		react(client, v.Info.Chat, v.Info.ID, "🎨")
+		go handleImageGen(client, v, fullArgs)
+
+	case "tr", "translate":
+		react(client, v.Info.Chat, v.Info.ID, "🔄")
+		go handleTranslate(client, v, fullArgs)
+
+	case "ss", "screenshot":
+		react(client, v.Info.Chat, v.Info.ID, "📸")
+		go handleScreenshot(client, v, fullArgs)
+
+	case "weather":
+		react(client, v.Info.Chat, v.Info.ID, "🌤️")
+		go handleWeather(client, v, fullArgs)
+
+	case "google", "search":
+		react(client, v.Info.Chat, v.Info.ID, "🔍")
+		go handleGoogle(client, v, fullArgs)
+
+	case "remini", "removebg":
+		react(client, v.Info.Chat, v.Info.ID, "⏳")
+		replyMessage(client, v, "⚠️ *Premium Feature:*\nThis feature requires a dedicated API Key. It will be unlocked in the next update by Silent Hackers!")
+		
     
 	case "fb", "facebook", "ig", "insta", "instagram", "tw", "x", "twitter", "pin", "pinterest", "threads", "snap", "snapchat", "reddit", "dm", "dailymotion", "vimeo", "rumble", "bilibili", "douyin", "kwai", "bitchute", "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp", "imgur", "giphy", "flickr", "9gag", "ifunny":
 	    react(client, v.Info.Chat, v.Info.ID, "🪩")
@@ -471,6 +497,18 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
  │ ➭ *%[3]stourl* [reply media]
  │ ➭ *%[3]stoptt* [text]
  │ ➭ *%[3]sfancy* [text]
+ │ 
+ ╰──────────────────────╯
+ 
+ ╭── ✦ [ ✨ 𝗔𝗜 𝗧𝗢𝗢𝗟𝗦 ✨ ] ──╮
+ │ 
+ │ ➭ *%[3]simg* [prompt]
+ │ ➭ *%[3]sremini* [reply img]
+ │ ➭ *%[3]sremovebg* [reply img]
+ │ ➭ *%[3]str* [lang] [text]
+ │ ➭ *%[3]sss* [website link]
+ │ ➭ *%[3]sgoogle* [query]
+ │ ➭ *%[3]sweather* [city]
  │ 
  ╰──────────────────────╯
 
