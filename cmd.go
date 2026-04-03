@@ -12,6 +12,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
+	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
 // ==========================================
