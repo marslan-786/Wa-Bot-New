@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
+//	"os"
 	"strings"
+	"math/rand"
 	"time"
 
 	"go.mau.fi/whatsmeow"
@@ -79,9 +80,17 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	}
 
 
+		// 3. Auto React (ملٹیپل ایموجیز کے ساتھ)
 	if settings.AutoReact && !isGroup && !v.Info.IsFromMe {
-		react(client, v.Info.Chat, v.Info.ID, "🚀")
+		// 🎭 یہاں تم اپنی مرضی کے جتنے مرضی ایموجیز ڈال سکتے ہو
+		emojis := []string{"❤️", "🔥", "🚀", "👍", "💯", "😎", "😂", "✨", "🎉", "💖", "🥰", "🫡", "👀", "🌟"}
+		
+		// 🎲 ان میں سے کوئی ایک رینڈم ایموجی سلیکٹ کرو
+		randomEmoji := emojis[rand.Intn(len(emojis))]
+		
+		react(client, v.Info.Chat, v.Info.ID, randomEmoji)
 	}
+
 	// ==========================================
 
 	// 🔥 3. موڈ کے حساب سے فلٹر کریں

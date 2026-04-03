@@ -15,7 +15,6 @@ import (
 // ==========================================
 // 📂 GROUP DATABASE INITIALIZATION
 // ==========================================
-// اسے main.go کے اندر initSettingsDB() کے بعد کال کریں گے
 func initGroupDB() {
 	createTableQuery := `
 	CREATE TABLE IF NOT EXISTS group_settings (
@@ -27,10 +26,10 @@ func initGroupDB() {
 		welcome BOOLEAN DEFAULT 0,
 		antidelete BOOLEAN DEFAULT 0
 	);`
-	settingsDB.Exec(createTableQuery) // settingsDB owner.go سے آ رہا ہے
+	settingsDB.Exec(createTableQuery) 
 }
 
-// ⚙️ Group Settings Toggle (For Antilink, Antipic, etc.)
+// ⚙️ Group Settings Toggle
 func handleGroupToggle(client *whatsmeow.Client, v *events.Message, settingName string, dbColumn string, args string) {
 	args = strings.ToLower(strings.TrimSpace(args))
 	if args != "on" && args != "off" {
@@ -41,7 +40,6 @@ func handleGroupToggle(client *whatsmeow.Client, v *events.Message, settingName 
 	state := false
 	if args == "on" { state = true }
 
-	// پہلے چیک کریں کہ اس گروپ کا ریکارڈ ہے یا نہیں
 	settingsDB.Exec("INSERT OR IGNORE INTO group_settings (group_jid) VALUES (?)", v.Info.Chat.User)
 	
 	query := fmt.Sprintf("UPDATE group_settings SET %s = ? WHERE group_jid = ?", dbColumn)
@@ -52,25 +50,22 @@ func handleGroupToggle(client *whatsmeow.Client, v *events.Message, settingName 
 }
 
 // ==========================================
-// 🛡️ DIRECT ACTION COMMANDS (No Pre-Admin Check)
+// 🛡️ DIRECT ACTION COMMANDS 
 // ==========================================
 
-// 🎯 ہدف والا یوزر نکالنے کا ہیلپر فنکشن
+// 🎯 ہدف والا یوزر نکالنے کا ہیلپر
 func getTargetJID(v *events.Message, args string) (types.JID, bool) {
-	// 1. اگر کسی میسج کا ریپلائی کیا ہے
 	extMsg := v.Message.GetExtendedTextMessage()
 	if extMsg != nil && extMsg.ContextInfo != nil && extMsg.ContextInfo.Participant != nil {
 		target, _ := types.ParseJID(*extMsg.ContextInfo.Participant)
 		return target, true
 	}
 	
-	// 2. اگر نمبر مینشن (Tag) کیا ہے
 	if extMsg != nil && extMsg.ContextInfo != nil && len(extMsg.ContextInfo.MentionedJID) > 0 {
 		target, _ := types.ParseJID(extMsg.ContextInfo.MentionedJID[0])
 		return target, true
 	}
 
-	// 3. اگر ڈائریکٹ نمبر لکھا ہے
 	if args != "" {
 		phone := cleanPhoneNumber(args)
 		target := types.NewJID(phone, types.DefaultUserServer)
@@ -80,7 +75,7 @@ func getTargetJID(v *events.Message, args string) (types.JID, bool) {
 	return types.EmptyJID, false
 }
 
-// 🧹 نمبر کو کلین کرنے والا فنکشن (+، اسپیس وغیرہ ہٹانا)
+// 🧹 کلین فون نمبر
 func cleanPhoneNumber(phone string) string {
 	cleaned := strings.Map(func(r rune) rune {
 		if r >= '0' && r <= '9' { return r }
@@ -105,7 +100,7 @@ func handleKick(client *whatsmeow.Client, v *events.Message, args string) {
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
 
-// ➕ Add (With Privacy Check)
+// ➕ Add (With Privacy Check Fix)
 func handleAdd(client *whatsmeow.Client, v *events.Message, args string) {
 	if args == "" {
 		replyMessage(client, v, "❌ Please provide a phone number to add.\nExample: `.add 923001234567`")
@@ -120,10 +115,10 @@ func handleAdd(client *whatsmeow.Client, v *events.Message, args string) {
 		return
 	}
 
-	// پرائیویسی سیٹنگز چیک کریں
+	// 🛠️ FIX: Status کی جگہ Error یوز کیا گیا ہے
 	for _, change := range resp {
-		if change.JID == targetJID {
-			if change.Status == "403" {
+		if change.JID.User == targetJID.User {
+			if change.Error == 403 {
 				replyMessage(client, v, "❌ Failed! The user has strict Privacy Settings. They cannot be added directly.")
 				return
 			}
@@ -140,7 +135,11 @@ func handlePromote(client *whatsmeow.Client, v *events.Message, args string) {
 	if !ok { replyMessage(client, v, "❌ Target not found."); return }
 
 	_, err := client.UpdateGroupParticipants(context.Background(), v.Info.Chat, []types.JID{targetJID}, whatsmeow.ParticipantChangePromote)
-	if err != nil { replyMessage(client, v, "❌ Action Failed! I am probably not an Admin.") } else { react(client, v, "✅") }
+	if err != nil { 
+		replyMessage(client, v, "❌ Action Failed! I am probably not an Admin.") 
+	} else { 
+		react(client, v.Info.Chat, v.Info.ID, "✅") // 🛠️ FIX: React Arguments
+	}
 }
 
 // 🔽 Demote
@@ -149,7 +148,11 @@ func handleDemote(client *whatsmeow.Client, v *events.Message, args string) {
 	if !ok { replyMessage(client, v, "❌ Target not found."); return }
 
 	_, err := client.UpdateGroupParticipants(context.Background(), v.Info.Chat, []types.JID{targetJID}, whatsmeow.ParticipantChangeDemote)
-	if err != nil { replyMessage(client, v, "❌ Action Failed! I am probably not an Admin.") } else { react(client, v, "✅") }
+	if err != nil { 
+		replyMessage(client, v, "❌ Action Failed! I am probably not an Admin.") 
+	} else { 
+		react(client, v.Info.Chat, v.Info.ID, "✅") // 🛠️ FIX: React Arguments
+	}
 }
 
 // 🔓 Group Open/Close
@@ -161,7 +164,11 @@ func handleGroupState(client *whatsmeow.Client, v *events.Message, state string)
 	}
 	
 	err := client.SetGroupAnnounce(context.Background(), v.Info.Chat, isClosed)
-	if err != nil { replyMessage(client, v, "❌ Action Failed! I am probably not an Admin.") } else { react(client, v, "✅") }
+	if err != nil { 
+		replyMessage(client, v, "❌ Action Failed! I am probably not an Admin.") 
+	} else { 
+		react(client, v.Info.Chat, v.Info.ID, "✅") // 🛠️ FIX: React Arguments
+	}
 }
 
 // 🗑️ Delete Message
@@ -173,9 +180,9 @@ func handleDel(client *whatsmeow.Client, v *events.Message) {
 	}
 
 	targetID := *extMsg.ContextInfo.StanzaID
-	targetSender, _ := types.ParseJID(*extMsg.ContextInfo.Participant)
 
-	_, err := client.RevokeMessage(context.Background(), v.Info.Chat, targetID, targetSender)
+	// 🛠️ FIX: RevokeMessage arguments updated
+	_, err := client.RevokeMessage(context.Background(), v.Info.Chat, types.MessageID(targetID))
 	if err != nil {
 		replyMessage(client, v, "❌ Failed to delete. I might not be an Admin, or the message is too old.")
 	}
@@ -193,7 +200,7 @@ func handleTags(client *whatsmeow.Client, v *events.Message, isHidden bool, args
 		textBuilder.WriteString("📢 *TAGGING EVERYONE*\n\n")
 		if args != "" { textBuilder.WriteString(fmt.Sprintf("💬 *Message:* %s\n\n", args)) }
 	} else {
-		textBuilder.WriteString(args) // Ghost tag میں صرف میسج جائے گا
+		textBuilder.WriteString(args)
 	}
 
 	for _, p := range groupInfo.Participants {
@@ -226,10 +233,10 @@ func handleVV(client *whatsmeow.Client, v *events.Message) {
 	var err error
 	var msg waProto.Message
 
-	// ہیلپر: میڈیا نکالنے کے لیے
 	extractMedia := func(m *waProto.Message) bool {
 		if img := m.GetImageMessage(); img != nil {
-			data, err = client.Download(img)
+			// 🛠️ FIX: context.Background() added to Download
+			data, err = client.Download(context.Background(), img)
 			if err == nil {
 				up, _ := client.Upload(context.Background(), data, whatsmeow.MediaImage)
 				msg.ImageMessage = &waProto.ImageMessage{
@@ -241,7 +248,8 @@ func handleVV(client *whatsmeow.Client, v *events.Message) {
 				return true
 			}
 		} else if vid := m.GetVideoMessage(); vid != nil {
-			data, err = client.Download(vid)
+			// 🛠️ FIX: context.Background() added to Download
+			data, err = client.Download(context.Background(), vid)
 			if err == nil {
 				up, _ := client.Upload(context.Background(), data, whatsmeow.MediaVideo)
 				msg.VideoMessage = &waProto.VideoMessage{
@@ -256,13 +264,12 @@ func handleVV(client *whatsmeow.Client, v *events.Message) {
 		return false
 	}
 
-	// 1. چیک کریں کہ ViewOnce ریپر (wrapper) کے اندر ہے یا ڈائریکٹ ہے
 	if vo := quoted.GetViewOnceMessage(); vo != nil {
 		extractMedia(vo.GetMessage())
 	} else if vo2 := quoted.GetViewOnceMessageV2(); vo2 != nil {
 		extractMedia(vo2.GetMessage())
 	} else {
-		extractMedia(quoted) // اگر نارمل امیج ہے تو اسے بھی کاپی کر دے گا
+		extractMedia(quoted) 
 	}
 
 	if data == nil {
@@ -272,31 +279,27 @@ func handleVV(client *whatsmeow.Client, v *events.Message) {
 	react(client, v.Info.Chat, v.Info.ID, "🚀")
 	client.SendMessage(context.Background(), v.Info.Chat, &msg)
 }
+
 // ==========================================
 // 👑 GROUP ADMIN CHECKER FUNCTION
 // ==========================================
 func isGroupAdmin(client *whatsmeow.Client, v *events.Message) bool {
-	// 1. اگر میسج پرائیویٹ چیٹ کا ہے، تو ظاہری بات ہے وہاں کوئی ایڈمن نہیں ہوتا
 	if !strings.Contains(v.Info.Chat.String(), "@g.us") {
 		return false
 	}
 
-	// 2. گروپ کی انفارمیشن حاصل کریں
 	groupInfo, err := client.GetGroupInfo(context.Background(), v.Info.Chat)
 	if err != nil {
 		return false
 	}
 
-	// 3. میسج بھیجنے والے کی کلین آئی ڈی نکالیں
 	senderNum := v.Info.Sender.ToNonAD().User
 
-	// 4. چیک کریں کہ کیا بھیجنے والا لسٹ میں ایڈمن ہے؟
 	for _, participant := range groupInfo.Participants {
 		if participant.JID.User == senderNum && (participant.IsAdmin || participant.IsSuperAdmin) {
-			return true // ہاں، یہ بندہ ایڈمن ہے!
+			return true 
 		}
 	}
 
-	// اگر ایڈمن نہیں ملا تو فالس (False)
 	return false
 }
