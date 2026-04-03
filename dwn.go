@@ -124,21 +124,39 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 // ==========================================
 // 🚀 2. UNIVERSAL YT-DLP DOWNLOADER (For FB, Insta, etc.)
 // ==========================================
-func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mode string, optionalFormat ...string) {
-	// بیک گراؤنڈ کلین اپ
-	go func() {
-		files, _ := filepath.Glob("*.*")
-		for _, f := range files {
-			if strings.HasSuffix(f, ".mp4") || strings.HasSuffix(f, ".mp3") || strings.HasPrefix(f, "temp_") {
-				info, err := os.Stat(f)
-				if err == nil && time.Since(info.ModTime()) > 5*time.Minute {
-					os.Remove(f)
-				}
-			}
-		}
-	}()
+// ==========================================
+// 🔗 HELPER: URL EXPANDER (Fixes 404 on Snapchat/FB)
+// ==========================================
+func getFinalURL(shortURL string) string {
+	// اگر لنک میں یہ الفاظ ہوں تبھی ایکسپیینڈ کرو
+	if !strings.Contains(shortURL, "snapchat.com/t/") && !strings.Contains(shortURL, "share/r/") && !strings.Contains(shortURL, "pin.it/") {
+		return shortURL
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("GET", shortURL, nil)
+	if err != nil { return shortURL }
 	
+	// براؤزر کا روپ تاکہ 404 نہ آئے
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+	
+	resp, err := client.Do(req)
+	if err != nil { return shortURL }
+	defer resp.Body.Close()
+	
+	finalUrl := resp.Request.URL.String()
+	fmt.Printf("🔗 https://my.clevelandclinic.org/health/treatments/23502-palate-expander Short: %s -> Final: %s\n", shortURL, finalUrl)
+	return finalUrl
+}
+
+// ==========================================
+// 🚀 THE MASTER ENGINE (yt-dlp with Heavy Bypass)
+// ==========================================
+func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mode string, optionalFormat ...string) {
 	react(client, v.Info.Chat, v.Info.ID, "⬇️")
+
+	// 🔥 CRITICAL FIX: شارٹ لنک کو اصلی لنک میں تبدیل کریں
+	targetUrl = getFinalURL(targetUrl)
 
 	isYouTube := strings.Contains(strings.ToLower(targetUrl), "youtu")
 	defaultUA := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -168,20 +186,9 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 		tempFileName = strings.Replace(tempFileName, ".mp4", ".mp3", 1)
 	}
 
-	type ytConfig struct {
-		ClientType string
-		UserAgent  string
-	}
-	rotationPool := []ytConfig{
-		{"android", "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"},
-		{"ios", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},
-		{"web", defaultUA},
-	}
-
 	var downloadErr error
 	var rawErrorOutput string
-	maxAttempts := 5
-	if !isYouTube { maxAttempts = 2 }
+	maxAttempts := 3
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		commonArgs := []string{
@@ -196,11 +203,9 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 		}
 
 		if isYouTube {
-			currentConfig := rotationPool[attempt % len(rotationPool)]
-			commonArgs = append(commonArgs, "--user-agent", currentConfig.UserAgent)
-			commonArgs = append(commonArgs, "--extractor-args", "youtube:player_client="+currentConfig.ClientType)
+			commonArgs = append(commonArgs, "--user-agent", defaultUA)
 		} else {
-			// ہیوی بائی پاس ہیڈرز
+			// یونیورسل بائی پاس ہیڈرز
 			commonArgs = append(commonArgs, 
 				"--user-agent", defaultUA,
 				"--add-header", "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -208,7 +213,6 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 				"--add-header", "Sec-Fetch-Dest: document",
 				"--add-header", "Sec-Fetch-Mode: navigate",
 				"--add-header", "Sec-Fetch-Site: cross-site",
-				"--add-header", "Upgrade-Insecure-Requests: 1",
 			)
 			if !isAudio && (len(optionalFormat) == 0 || optionalFormat[0] == "") {
 				formatArg = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
@@ -233,9 +237,6 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 		}
 		
 		rawErrorOutput = strings.TrimSpace(stderr.String())
-		if attempt == 0 {
-			go exec.Command("yt-dlp", "-U").Run()
-		}
 	}
 
 	if downloadErr != nil {
@@ -244,6 +245,7 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 			rawErrorOutput = rawErrorOutput[:3000] + "\n...[Truncated]"
 		}
 		replyMessage(client, v, fmt.Sprintf("❌ *Download Error:*\n```\n%s\n```", rawErrorOutput))
+		react(client, v.Info.Chat, v.Info.ID, "❌")
 		return
 	}
 
@@ -252,7 +254,7 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 	finalPath := cleanTitle + finalExt
 	os.Rename(tempFileName, finalPath)
 
-	defer os.Remove(finalPath) // فنکشن ختم ہونے پر ڈیلیٹ
+	defer os.Remove(finalPath)
 
 	fileInfo, err := os.Stat(finalPath)
 	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
@@ -274,7 +276,6 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 
 	react(client, v.Info.Chat, v.Info.ID, "📤")
 
-	// 💥 سیدھا آپ کا اپنا سینڈنگ فنکشن استعمال ہو رہا ہے!
 	for i, filePath := range filesToSend {
 		uploadAndSendFile(client, v, filePath, cleanTitle, isAudio, i+1, len(filesToSend))
 		if filePath != finalPath {
@@ -284,6 +285,7 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
+
 
 // ==========================================
 // 📤 3. CORE UPLOAD & SEND FUNCTION
