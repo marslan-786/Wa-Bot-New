@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt" // 🛠️ FIX: یہ مسنگ تھا جس کی وجہ سے ڈوکر کریش ہوا
+	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -62,7 +63,7 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 			return // گروپس میں بلاک
 		}
 		if settings.Mode == "admin" && isGroup {
-			groupInfo, err := client.GetGroupInfo(v.Info.Chat)
+			groupInfo, err := client.GetGroupInfo(context.Background(), v.Info.Chat)
 			if err != nil { return }
 			isAdmin := false
 			for _, participant := range groupInfo.Participants {
