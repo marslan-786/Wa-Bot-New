@@ -121,152 +121,68 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
 
-// ==========================================
-// 🚀 2. UNIVERSAL YT-DLP DOWNLOADER (For FB, Insta, etc.)
-// ==========================================
-// ==========================================
-// 🔗 HELPER: URL EXPANDER (Fixes 404 on Snapchat/FB)
-// ==========================================
-func getFinalURL(shortURL string) string {
-	// اگر لنک میں یہ الفاظ ہوں تبھی ایکسپیینڈ کرو
-	if !strings.Contains(shortURL, "snapchat.com/t/") && !strings.Contains(shortURL, "share/r/") && !strings.Contains(shortURL, "pin.it/") {
-		return shortURL
-	}
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest("GET", shortURL, nil)
-	if err != nil { return shortURL }
-	
-	// براؤزر کا روپ تاکہ 404 نہ آئے
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-	
-	resp, err := client.Do(req)
-	if err != nil { return shortURL }
-	defer resp.Body.Close()
-	
-	finalUrl := resp.Request.URL.String()
-	fmt.Printf("🔗 https://my.clevelandclinic.org/health/treatments/23502-palate-expander Short: %s -> Final: %s\n", shortURL, finalUrl)
-	return finalUrl
-}
-
-// ==========================================
-// 🚀 THE MASTER ENGINE (yt-dlp with Heavy Bypass)
-// ==========================================
 func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mode string, optionalFormat ...string) {
 	react(client, v.Info.Chat, v.Info.ID, "⬇️")
 
-	// 🔥 CRITICAL FIX: شارٹ لنک کو اصلی لنک میں تبدیل کریں
-	targetUrl = getFinalURL(targetUrl)
-
-	isYouTube := strings.Contains(strings.ToLower(targetUrl), "youtu")
-	defaultUA := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-	
-	cmdTitle := exec.Command("yt-dlp", "--get-title", "--no-playlist", "--user-agent", defaultUA, targetUrl)
-	titleOut, _ := cmdTitle.Output()
-
-	cleanTitle := "Media_File"
-	if len(titleOut) > 0 {
-		cleanTitle = strings.TrimSpace(string(titleOut))
-		cleanTitle = strings.Map(func(r rune) rune {
-			if strings.ContainsRune(`/\?%*:|"<>`, r) { return '-' }
-			return r
-		}, cleanTitle)
-	}
-
-	tempFileName := fmt.Sprintf("temp_%d.mp4", time.Now().UnixNano())
-	formatArg := "bestvideo+bestaudio/best"
-	
-	if len(optionalFormat) > 0 && optionalFormat[0] != "" {
-		formatArg = optionalFormat[0]
-	}
-
+	// 1. ریزولوشن سیٹ کریں (ویڈیو کے لیے mp4 اور آڈیو کے لیے mp3)
+	resolution := "mp4"
 	isAudio := false
 	if mode == "audio" {
+		resolution = "mp3"
 		isAudio = true
-		tempFileName = strings.Replace(tempFileName, ".mp4", ".mp3", 1)
 	}
 
-	var downloadErr error
-	var rawErrorOutput string
-	maxAttempts := 3
+	httpClient := &http.Client{Timeout: 5 * time.Minute}
 
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		commonArgs := []string{
-			"--no-playlist",
-			"--force-ipv4",
-			"--no-check-certificate",
-			"--geo-bypass",
-		}
-
-		if attempt > 0 {
-			commonArgs = append(commonArgs, "--rm-cache-dir")
-		}
-
-		if isYouTube {
-			commonArgs = append(commonArgs, "--user-agent", defaultUA)
-		} else {
-			// یونیورسل بائی پاس ہیڈرز
-			commonArgs = append(commonArgs, 
-				"--user-agent", defaultUA,
-				"--add-header", "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-				"--add-header", "Accept-Language: en-US,en;q=0.5",
-				"--add-header", "Sec-Fetch-Dest: document",
-				"--add-header", "Sec-Fetch-Mode: navigate",
-				"--add-header", "Sec-Fetch-Site: cross-site",
-			)
-			if !isAudio && (len(optionalFormat) == 0 || optionalFormat[0] == "") {
-				formatArg = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
-			}
-		}
-
-		var args []string
-		if isAudio {
-			args = append(commonArgs, "-f", "bestaudio/best", "--extract-audio", "--audio-format", "mp3", "--audio-quality", "192K", "-o", tempFileName, targetUrl)
-		} else {
-			// 🔥 WHATSAPP PLAYBACK FIX 🔥
-			// 1. -S "vcodec:h264" -> واٹس ایپ کے لیے لازمی H.264 کوڈیک فورس کرے گا
-			// 2. --postprocessor-args -> پکسل فارمیٹ کو موبائل سکرینز کے حساب سے سیٹ کرے گا
-			args = append(commonArgs, 
-				"-S", "vcodec:h264,res,acodec:m4a", 
-				"--postprocessor-args", "Video:-pix_fmt yuv420p", 
-				"-f", formatArg, 
-				"--merge-output-format", "mp4", 
-				"-o", tempFileName, 
-				targetUrl,
-			)
-		}
-
-		cmd := exec.Command("yt-dlp", args...)
-		var stderr bytes.Buffer
-		cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
-		
-		downloadErr = cmd.Run()
-
-		if downloadErr == nil {
-			break
-		}
-		
-		rawErrorOutput = strings.TrimSpace(stderr.String())
+	// 2. آپ کی نئی دھماکے دار API کو کال کریں
+	apiUrl := fmt.Sprintf("https://all-dwn-api-production.up.railway.app/api/download?url=%s&resolution=%s", targetUrl, resolution)
+	resp, err := httpClient.Get(apiUrl)
+	if err != nil { 
+		fmt.Printf("❌ [API ERROR]: %v\n", err)
+		replyMessage(client, v, "❌ *System Error:* API connection failed.")
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return 
 	}
+	defer resp.Body.Close()
 
-	if downloadErr != nil {
-		fmt.Printf("❌ Download Error permanently: %v\n", downloadErr)
-		if len(rawErrorOutput) > 3000 {
-			rawErrorOutput = rawErrorOutput[:3000] + "\n...[Truncated]"
-		}
-		replyMessage(client, v, fmt.Sprintf("❌ *Download Error:*\n```\n%s\n```", rawErrorOutput))
+	var apiRes APIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiRes); err != nil || !apiRes.Success || apiRes.DownloadURL == "" {
+		fmt.Printf("❌ [JSON/SUCCESS ERROR]: %v | Res: %+v\n", err, apiRes)
+		replyMessage(client, v, "❌ *Download Failed:* API could not extract this link.")
 		react(client, v.Info.Chat, v.Info.ID, "❌")
 		return
 	}
 
-	finalExt := ".mp4"
-	if isAudio { finalExt = ".mp3" }
-	finalPath := cleanTitle + finalExt
-	os.Rename(tempFileName, finalPath)
+	// 3. فائل ڈاؤنلوڈ کرنا شروع کریں
+	fileResp, err := httpClient.Get(apiRes.DownloadURL)
+	if err != nil { 
+		replyMessage(client, v, "❌ *Error:* Failed to stream media from API.")
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return 
+	}
+	defer fileResp.Body.Close()
 
-	defer os.Remove(finalPath)
+	ext := ".mp4"
+	if isAudio { ext = ".mp3" }
+	tempFileName := fmt.Sprintf("./data/temp_%d%s", time.Now().UnixNano(), ext)
+	
+	outFile, err := os.Create(tempFileName)
+	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	
+	_, err = io.Copy(outFile, fileResp.Body)
+	outFile.Close()
 
-	fileInfo, err := os.Stat(finalPath)
+	if err != nil { 
+		os.Remove(tempFileName)
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return 
+	}
+
+	// فنکشن کے آخر میں صفائی
+	defer os.Remove(tempFileName)
+
+	// 4. سائز چیک کریں اور اگر بڑی ہو تو کاٹیں (Reuse existing logic)
+	fileInfo, err := os.Stat(tempFileName)
 	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 	
 	fileSize := fileInfo.Size()
@@ -274,21 +190,22 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 
 	if fileSize > MaxWhatsAppSize && !isAudio {
 		react(client, v.Info.Chat, v.Info.ID, "✂️") 
-		parts, err := splitVideoSmart(finalPath, SafeMarginMB)
+		parts, err := splitVideoSmart(tempFileName, SafeMarginMB)
 		if err != nil || len(parts) == 0 {
-			filesToSend = append(filesToSend, finalPath)
+			filesToSend = append(filesToSend, tempFileName)
 		} else {
 			filesToSend = parts
 		}
 	} else {
-		filesToSend = append(filesToSend, finalPath)
+		filesToSend = append(filesToSend, tempFileName)
 	}
 
 	react(client, v.Info.Chat, v.Info.ID, "📤")
 
+	// 5. فائنل سینڈنگ (آپ کا پرانا پکا فنکشن)
 	for i, filePath := range filesToSend {
-		uploadAndSendFile(client, v, filePath, cleanTitle, isAudio, i+1, len(filesToSend))
-		if filePath != finalPath {
+		uploadAndSendFile(client, v, filePath, apiRes.Title, isAudio, i+1, len(filesToSend))
+		if filePath != tempFileName {
 			os.Remove(filePath)
 		}
 	}
@@ -714,24 +631,20 @@ func handleTikTok(client *whatsmeow.Client, v *events.Message, args string) {
 // ==========================================
 // 🌐 UNIVERSAL MEDIA DOWNLOADER (Silent Router)
 // ==========================================
+// ==========================================
+// 🌐 UNIVERSAL MEDIA DOWNLOADER (Silent Router - Pure Link)
+// ==========================================
 func handleUniversalDownload(client *whatsmeow.Client, v *events.Message, url string, cmd string) {
 	if url == "" {
 		replyMessage(client, v, "❌ *Error:* Please provide a valid link.")
 		return
 	}
 
-	// 🛠️ FIX: اگر اسنیپ چیٹ کا شارٹ لنک ہے تو اسے Expand کر لیں
-	if strings.Contains(url, "snapchat.com/t/") || strings.Contains(url, "pin.it/") {
-		url = expandURL(url)
-	}
-
+	// نوٹ: ہم یہاں لنک کو ایکسپینڈ نہیں کر رہے کیونکہ آپ کی API شارٹ لنکس سپورٹ کرتی ہے
 	var emoji, mode string
-	mode = "video" // ڈیفالٹ موڈ ویڈیو ہے
-    
-    // ... باقی سارا آپ کا پرانا کوڈ وہی رہے گا ...
+	mode = "video" // ڈیفالٹ موڈ ویڈیو
 
-
-	// کمانڈ کے حساب سے صرف ایموجی اور موڈ سیٹ کریں
+	// کمانڈ کے حساب سے ایموجی اور موڈ کا فیصلہ
 	switch cmd {
 	case "fb", "facebook":
 		emoji = "💙"
@@ -748,42 +661,15 @@ func handleUniversalDownload(client *whatsmeow.Client, v *events.Message, url st
 	case "dm", "dailymotion":
 		emoji = "📺"
 	case "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp":
-		// یہ سارے میوزک پلیٹ فارمز ہیں اس لیے ان کا موڈ 'audio' کر دیں
 		emoji = "🎵"
 		mode = "audio"
 	default:
 		emoji = "🚀"
 	}
 
-	// 1. صرف ری ایکشن دیں (کوئی پریمیم کارڈ یا میسج نہیں جائے گا)
+	// 1. صرف ری ایکشن دیں (پروفیشنل لک کے لیے)
 	react(client, v.Info.Chat, v.Info.ID, emoji)
 
-	// 2. ماسٹر ڈاؤنلوڈر کو فائل لانے کے لیے خاموشی سے بھیج دیں
+	// 2. ماسٹر ڈاؤنلوڈر کو اوریجنل لنک بھیج دیں
 	go downloadAndSend(client, v, url, mode)
-}
-
-// ==========================================
-// 🔗 URL EXPANDER HELPER (For Snapchat/Pinterest)
-// ==========================================
-func expandURL(shortURL string) string {
-	client := &http.Client{
-		Timeout: 15 * time.Second,
-	}
-	req, err := http.NewRequest("GET", shortURL, nil)
-	if err != nil {
-		return shortURL
-	}
-	
-	// براؤزر کا روپ دھاریں تاکہ 404 نہ آئے
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-	
-	resp, err := client.Do(req)
-	if err != nil {
-		return shortURL
-	}
-	defer resp.Body.Close()
-	
-	// یہ فائنل اور اصلی لنک واپس کر دے گا (e.g., snapchat.com/spotlight/...)
-	return resp.Request.URL.String()
 }
