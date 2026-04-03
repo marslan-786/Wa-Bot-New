@@ -68,7 +68,6 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	doneAnim := make(chan bool)
 	animating := true
 
-	// اینیمیشن روکنے کا فنکشن
 	stopAnim := func() {
 		if animating {
 			close(doneAnim)
@@ -80,13 +79,12 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
-		// ڈاؤن لوڈنگ والے ایموجیز کی لسٹ جو بار بار بدلیں گے
 		emojis := []string{"⏳", "⏬", "📥", "🔄", "⬇️"}
 		i := 0
 		for {
 			select {
 			case <-doneAnim:
-				return // ڈاؤن لوڈ ختم ہونے پر لوپ سے باہر آ جائیں
+				return
 			case <-ticker.C:
 				react(client, v.Info.Chat, v.Info.ID, emojis[i%len(emojis)])
 				i++
@@ -95,21 +93,29 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	}()
 	// ==========================================
 
+	// 🔄 FALLBACK LOGIC: اگر API کام نہ کرے تو یہ فنکشن چلے گا
+	executeFallback := func() {
+		stopAnim() // پہلے اینیمیشن روکو
+		mode := "video"
+		if isAudio { mode = "audio" }
+		// ڈاؤنلوڈ اینڈ سینڈ والے انٹرنل سسٹم کو کال کر دو
+		downloadAndSend(client, v, targetUrl, mode)
+	}
+
 	httpClient := &http.Client{Timeout: 5 * time.Minute}
 
 	apiUrl := fmt.Sprintf("https://silent-yt-dwn.up.railway.app/api/download?url=%s&resolution=%s", targetUrl, resolution)
 	resp, err := httpClient.Get(apiUrl)
-	if err != nil { stopAnim(); react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	if err != nil { executeFallback(); return }
 	defer resp.Body.Close()
 
 	var apiRes APIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiRes); err != nil || !apiRes.Success || apiRes.DownloadURL == "" {
-		stopAnim()
-		react(client, v.Info.Chat, v.Info.ID, "❌"); return
+		executeFallback(); return
 	}
 
 	fileResp, err := httpClient.Get(apiRes.DownloadURL)
-	if err != nil { stopAnim(); react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	if err != nil { executeFallback(); return }
 	defer fileResp.Body.Close()
 
 	ext := ".mp4"
@@ -117,20 +123,20 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	tempFileName := fmt.Sprintf("./data/temp_%d%s", time.Now().UnixNano(), ext)
 	
 	outFile, err := os.Create(tempFileName)
-	if err != nil { stopAnim(); react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	if err != nil { executeFallback(); return }
 	
 	_, err = io.Copy(outFile, fileResp.Body)
 	outFile.Close()
 	if err != nil { 
 		os.Remove(tempFileName)
-		stopAnim() 
-		react(client, v.Info.Chat, v.Info.ID, "❌"); return 
+		executeFallback() 
+		return 
 	}
 
 	defer os.Remove(tempFileName)
 
 	fileInfo, err := os.Stat(tempFileName)
-	if err != nil { stopAnim(); react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	if err != nil { executeFallback(); return }
 	
 	fileSize := fileInfo.Size()
 	var filesToSend []string
@@ -138,7 +144,7 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	// 🔥 ڈاؤن لوڈ مکمل! اب اینیمیشن کو روک دیں تاکہ اپلوڈ والے ایموجیز لگ سکیں
 	stopAnim() 
 
-	if fileSize > MaxWhatsAppSize && !isAudio {
+	if fileSize > int64(MaxWhatsAppSize) && !isAudio {
 		react(client, v.Info.Chat, v.Info.ID, "✂️") 
 		parts, err := splitVideoSmart(tempFileName, SafeMarginMB)
 		if err != nil || len(parts) == 0 {
@@ -164,7 +170,36 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 
 
 func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mode string, optionalFormat ...string) {
-	react(client, v.Info.Chat, v.Info.ID, "⬇️")
+	// ==========================================
+	// 🌀 DYNAMIC REACTION ANIMATION (Loading State)
+	// ==========================================
+	doneAnim := make(chan bool)
+	animating := true
+
+	stopAnim := func() {
+		if animating {
+			close(doneAnim)
+			animating = false
+		}
+	}
+	defer stopAnim() 
+
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		emojis := []string{"⏳", "⏬", "📥", "🔄", "⬇️"}
+		i := 0
+		for {
+			select {
+			case <-doneAnim:
+				return 
+			case <-ticker.C:
+				react(client, v.Info.Chat, v.Info.ID, emojis[i%len(emojis)])
+				i++
+			}
+		}
+	}()
+	// ==========================================
 
 	isAudio := false
 	if mode == "audio" {
@@ -174,6 +209,7 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 	// 1. ڈائریکٹ اپنا انٹرنل اسکریپر فنکشن کال کرو
 	title, downloadURL, err := extractVidsSaveURL(targetUrl, mode)
 	if err != nil || downloadURL == "" {
+		stopAnim() // اینیمیشن روکیں
 		fmt.Printf("❌ [EXTRACTION ERROR]: %v\n", err)
 		replyMessage(client, v, "❌ *Download Failed:* System could not extract this link.")
 		react(client, v.Info.Chat, v.Info.ID, "❌")
@@ -185,38 +221,41 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 	// 2. فائل ڈاؤنلوڈ کرنا شروع کریں
 	fileResp, err := httpClient.Get(downloadURL)
 	if err != nil { 
+		stopAnim()
 		replyMessage(client, v, "❌ *Error:* Failed to stream media from server.")
 		react(client, v.Info.Chat, v.Info.ID, "❌")
 		return 
 	}
 	defer fileResp.Body.Close()
 
-	// VidsSave والے آڈیو کے لیے اکثر .m4a دیتے ہیں، اسے ہینڈل کر لیا
 	ext := ".mp4"
 	if isAudio { ext = ".m4a" }
 	tempFileName := fmt.Sprintf("./data/temp_%d%s", time.Now().UnixNano(), ext)
 	
 	outFile, err := os.Create(tempFileName)
-	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	if err != nil { stopAnim(); react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 	
 	_, err = io.Copy(outFile, fileResp.Body)
 	outFile.Close()
 
 	if err != nil { 
 		os.Remove(tempFileName)
+		stopAnim()
 		react(client, v.Info.Chat, v.Info.ID, "❌")
 		return 
 	}
 
-	// فنکشن کے آخر میں صفائی
 	defer os.Remove(tempFileName)
 
-	// 3. سائز چیک کریں اور اگر بڑی ہو تو کاٹیں (Reuse existing logic)
+	// 3. سائز چیک کریں
 	fileInfo, err := os.Stat(tempFileName)
-	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	if err != nil { stopAnim(); react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 	
 	fileSize := fileInfo.Size()
 	var filesToSend []string
+
+	// 🔥 ڈاؤن لوڈ مکمل! اینیمیشن روک دیں
+	stopAnim()
 
 	if fileSize > int64(MaxWhatsAppSize) && !isAudio {
 		react(client, v.Info.Chat, v.Info.ID, "✂️") 
@@ -242,8 +281,6 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
-
-
 
 // ==========================================
 // 📤 3. CORE UPLOAD & SEND FUNCTION
