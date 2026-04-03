@@ -24,15 +24,18 @@ var dbContainer *sqlstore.Container
 // ==========================================
 // 📂 1. DATABASE INITIALIZATION
 // ==========================================
+// ==========================================
+// 📂 1. DATABASE INITIALIZATION
+// ==========================================
 func initDB() {
-	dbLog := waLog.Stdout("Database", "WARN", true)
+	// 🛠️ FIX: "WARN" کو "ERROR" کر دیا ہے تاکہ کنسول صاف رہے
+	dbLog := waLog.Stdout("Database", "ERROR", true)
 
 	err := os.MkdirAll("./data", 0755)
 	if err != nil {
 		log.Fatal("❌ Data directory create error:", err)
 	}
 
-	// 🛠️ FIX: context.Background() ایڈ کر دیا
 	dbContainer, err = sqlstore.New(context.Background(), "sqlite3", "file:./data/sessions.db?_foreign_keys=on", dbLog)
 	if err != nil {
 		log.Fatal("❌ Database connection error:", err)
@@ -45,7 +48,6 @@ func initDB() {
 // 🔄 2. AUTO-CONNECT ALL SESSIONS
 // ==========================================
 func RunAllSessions() {
-	// 🛠️ FIX: context.Background() ایڈ کر دیا
 	devices, err := dbContainer.GetAllDevices(context.Background())
 	if err != nil {
 		log.Println("❌ Error fetching devices:", err)
@@ -53,7 +55,8 @@ func RunAllSessions() {
 	}
 
 	for _, device := range devices {
-		clientLog := waLog.Stdout("Client", "WARN", true)
+		// 🛠️ FIX: "WARN" کو "ERROR" کر دیا تاکہ Decryption ایررز بوٹ کو سلو نہ کریں
+		clientLog := waLog.Stdout("Client", "ERROR", true)
 		client := whatsmeow.NewClient(device, clientLog)
 
 		client.AddEventHandler(func(evt interface{}) {
@@ -85,7 +88,9 @@ func ConnectNewSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deviceStore := dbContainer.NewDevice()
-	clientLog := waLog.Stdout("Client", "INFO", true)
+	
+	// 🛠️ FIX: "INFO" کو "ERROR" کر دیا تاکہ فالتو لاگز نہ آئیں
+	clientLog := waLog.Stdout("Client", "ERROR", true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
 	client.AddEventHandler(func(evt interface{}) {
@@ -98,7 +103,6 @@ func ConnectNewSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 🛠️ FIX: context.Background() ایڈ کر دیا
 	code, err := client.PairPhone(context.Background(), phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
 	if err != nil {
 		http.Error(w, "Failed to get pairing code", http.StatusInternalServerError)
@@ -110,6 +114,7 @@ func ConnectNewSession(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("🔗 Pairing code generated for: %s", phone)
 }
+
 
 // ==========================================
 // 🚀 4. MAIN ENGINE START

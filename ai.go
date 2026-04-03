@@ -93,13 +93,14 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 		return
 	}
 
-	// 🌐 Groq Request Payload
+		// 🌐 Groq Request Payload (Updated Latest Fast Model)
 	requestBody := map[string]interface{}{
-		"model":       "llama3-8b-8192", // سب سے فاسٹ اور سٹیبل ورزن جس کی لمٹ زیادہ ہے
+		"model":       "llama-3.1-8b-instant", // 🛠️ FIX: Old model was decommissioned
 		"messages":    session.Messages,
-		"temperature": 0.8, // تھوڑا سا کریئٹیو اور مزاحیہ بنانے کے لیے
+		"temperature": 0.8,
 		"max_tokens":  2048,
 	}
+
 
 	jsonData, _ := json.Marshal(requestBody)
 	req, _ := http.NewRequest("POST", "https://api.groq.com/openai/v1/chat/completions", bytes.NewBuffer(jsonData))
