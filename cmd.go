@@ -269,6 +269,36 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		react(client, v.Info.Chat, v.Info.ID, "👀")
 		go handleVV(client, v)
 		
+	// 🎨 EDITING ZONE COMMANDS
+	case "s", "sticker":
+		react(client, v.Info.Chat, v.Info.ID, "🎨")
+		go handleSticker(client, v)
+
+	case "toimg":
+		react(client, v.Info.Chat, v.Info.ID, "🖼️")
+		go handleToImg(client, v)
+
+	case "tovideo":
+		react(client, v.Info.Chat, v.Info.ID, "📽️")
+		go handleToVideo(client, v, false)
+
+	case "togif":
+		react(client, v.Info.Chat, v.Info.ID, "👾")
+		go handleToVideo(client, v, true)
+
+	case "tourl":
+		react(client, v.Info.Chat, v.Info.ID, "🌐")
+		go handleToUrl(client, v)
+
+	case "toptt":
+		react(client, v.Info.Chat, v.Info.ID, "🎙️")
+		go handleToPTT(client, v, fullArgs)
+
+	case "fancy":
+		react(client, v.Info.Chat, v.Info.ID, "✨")
+		go handleFancy(client, v, fullArgs)
+		
+		
 	case "id":
 		react(client, v.Info.Chat, v.Info.ID, "🪪")
 		go handleID(client, v)
@@ -432,6 +462,17 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
  │ 
  ╰──────────────────────╯
  
+ ╭── ✦ [ 🎨 𝗘𝗗𝗜𝗧𝗜𝗡𝗚 𝗭𝗢𝗡𝗘 🎨 ] ──╮
+ │ 
+ │ ➭ *%[3]ss / %[3]ssticker* [reply image]
+ │ ➭ *%[3]stoimg* [reply sticker]
+ │ ➭ *%[3]stogif* [reply sticker]
+ │ ➭ *%[3]stovideo* [reply sticker]
+ │ ➭ *%[3]stourl* [reply media]
+ │ ➭ *%[3]stoptt* [text]
+ │ ➭ *%[3]sfancy* [text]
+ │ 
+ ╰──────────────────────╯
 
   ⚡━ ✦ 💖 𝙎𝙞𝙡𝙚𝙣𝙩 𝙃𝙖𝙘𝙠𝙚𝙧𝙨 💖 ✦ ━ ⚡`, 
 	strings.ToUpper(settings.Mode), uptimeStr, settings.Prefix)
