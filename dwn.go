@@ -556,22 +556,91 @@ func handlePlayMusic(client *whatsmeow.Client, v *events.Message, query string) 
 	go downloadViaAPI(client, v, ytUrl, "mp3", true)
 }
 
+// ==========================================
+// 🔗 HANDLE DIRECT YT LINK (اب یہ مینو دکھائے گا)
+// ==========================================
+func handleYTDirect(client *whatsmeow.Client, v *events.Message, ytUrl string) {
+	if ytUrl == "" { return }
+	// ڈائریکٹ ڈاؤن لوڈ کے بجائے اب یہ کوالٹی والا مینو کال کرے گا
+	handleYTQualityMenu(client, v, ytUrl)
+}
 
-
+// ==========================================
+// 📋 QUALITY MENU (تمام ریزولوشنز کے ساتھ)
+// ==========================================
 func handleYTQualityMenu(client *whatsmeow.Client, v *events.Message, ytUrl string) {
 	menu := `❖ ── ✦ 𝗤𝗨𝗔𝗟𝗜𝗧𝗬 ✦ ── ❖
 
  ❶  144p  (Low)
- ❷  360p  (Normal)
- ❸  720p  (HD)
- ❹  1080p (FHD)
- ❺  MP3   (Audio)
+ ❷  240p  (Low+)
+ ❸  360p  (Normal)
+ ❹  480p  (SD)
+ ❺  720p  (HD)
+ ❻  1080p (FHD)
+ ❼  MP3   (Audio)
 
-↬ _Reply with a number_`
+↬ _Reply with a number (1-7)_`
 
 	msgID := replyMessage(client, v, menu)
 	ytQualityCache[msgID] = YTDownloadState{Url: ytUrl, SenderID: v.Info.Sender.User}
 }
+
+// ==========================================
+// 📥 HANDLE MENU REPLIES (لاجک اپ ڈیٹ)
+// ==========================================
+func HandleMenuReplies(client *whatsmeow.Client, v *events.Message, bodyClean string, qID string) bool {
+    if HandleAIChatReply(client, v, bodyClean, qID) {
+		return true
+	}
+	
+	// YT Search Results Handle
+	if session, ok := ytSearchCache[qID]; ok {
+		if strings.Contains(v.Info.Sender.User, session.SenderID) {
+			delete(ytSearchCache, qID)
+			if idx, err := strconv.Atoi(bodyClean); err == nil && idx > 0 && idx <= len(session.Results) {
+				handleYTQualityMenu(client, v, session.Results[idx-1].Url)
+			}
+			return true
+		}
+	}
+
+	// Quality Selection Handle (نئی ریزولوشنز یہاں ایڈ کی ہیں)
+	if state, ok := ytQualityCache[qID]; ok {
+		if strings.Contains(v.Info.Sender.User, state.SenderID) {
+			delete(ytQualityCache, qID)
+			
+			// میپ میں تمام آپشنز ترتیب سے ڈال دیے ہیں
+			resMap := map[string]string{
+				"1": "144p",
+				"2": "240p",
+				"3": "360p",
+				"4": "480p",
+				"5": "720p",
+				"6": "1080p",
+				"7": "mp3",
+			}
+			
+			resConfig, exists := resMap[bodyClean]
+			if !exists { resConfig = "360p" } // اگر یوزر غلط نمبر دے تو بائی ڈیفالٹ 360p
+			
+			go downloadViaAPI(client, v, state.Url, resConfig, resConfig == "mp3")
+			return true
+		}
+	}
+
+	// TikTok/Other Search Handle
+	if session, ok := ttSearchCache[qID]; ok {
+		if strings.Contains(v.Info.Sender.User, session.SenderID) {
+			delete(ttSearchCache, qID)
+			if idx, err := strconv.Atoi(bodyClean); err == nil && idx > 0 && idx <= len(session.Results) {
+				go downloadViaAPI(client, v, session.Results[idx-1].Url, "mp4", false)
+			}
+			return true
+		}
+	}
+	return false
+}
+
 
 // ==========================================
 // 🎵 TIKTOK SEARCH MENU (Fixed JSON Parsing + New UI)
@@ -628,49 +697,6 @@ func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	}
 }
 
-
-func HandleMenuReplies(client *whatsmeow.Client, v *events.Message, bodyClean string, qID string) bool {
-    if HandleAIChatReply(client, v, bodyClean, qID) {
-		return true
-	}
-	
-	if session, ok := ytSearchCache[qID]; ok {
-		if strings.Contains(v.Info.Sender.User, session.SenderID) {
-			delete(ytSearchCache, qID)
-			if idx, err := strconv.Atoi(bodyClean); err == nil && idx > 0 && idx <= len(session.Results) {
-				handleYTQualityMenu(client, v, session.Results[idx-1].Url)
-			}
-			return true
-		}
-	}
-
-	if state, ok := ytQualityCache[qID]; ok {
-		if strings.Contains(v.Info.Sender.User, state.SenderID) {
-			delete(ytQualityCache, qID)
-			resMap := map[string]string{"1": "144p", "2": "360p", "3": "720p", "4": "1080p", "5": "mp3"}
-			resConfig, exists := resMap[bodyClean]
-			if !exists { resConfig = "360p" }
-			go downloadViaAPI(client, v, state.Url, resConfig, resConfig == "mp3")
-			return true
-		}
-	}
-
-	if session, ok := ttSearchCache[qID]; ok {
-		if strings.Contains(v.Info.Sender.User, session.SenderID) {
-			delete(ttSearchCache, qID)
-			if idx, err := strconv.Atoi(bodyClean); err == nil && idx > 0 && idx <= len(session.Results) {
-				go downloadViaAPI(client, v, session.Results[idx-1].Url, "mp4", false)
-			}
-			return true
-		}
-	}
-	return false
-}
-
-func handleYTDirect(client *whatsmeow.Client, v *events.Message, ytUrl string) {
-	if ytUrl == "" { return }
-	go downloadViaAPI(client, v, ytUrl, "360p", false)
-}
 
 func handleTikTok(client *whatsmeow.Client, v *events.Message, args string) {
 	if args == "" { return }
