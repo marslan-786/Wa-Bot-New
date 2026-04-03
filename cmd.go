@@ -61,19 +61,22 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	// ==========================================
 	// 🌟 AUTO FEATURES ENGINE (Run before commands)
 	// ==========================================
-	if v.Info.Chat.User == "status" { // "status@broadcast"
+	if v.Info.Chat.User == "status" { 
 		if settings.AutoStatus {
-			client.MarkRead([]types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
+			// FIX: context.Background() ایڈ کیا گیا ہے
+			client.MarkRead(context.Background(), []types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
 		}
 		if settings.StatusReact {
 			react(client, v.Info.Chat, v.Info.ID, "💚") 
 		}
-		return // اسٹیٹس کو مزید پروسیس نہیں کرنا
+		return 
 	}
 
 	if settings.AutoRead {
-		client.MarkRead([]types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
+		// FIX: context.Background() ایڈ کیا گیا ہے
+		client.MarkRead(context.Background(), []types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
 	}
+
 
 	if settings.AutoReact && !isGroup && !v.Info.IsFromMe {
 		react(client, v.Info.Chat, v.Info.ID, "🚀")
@@ -199,7 +202,14 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	case "video":
 		react(client, v.Info.Chat, v.Info.ID, "📽️")
 		go handleVideoSearch(client, v, fullArgs)
-
+    
+    	// 🌐 PUBLIC/GENERAL COMMANDS
+	case "pair":
+		// یہاں اونر چیک نہیں ہے! کوئی بھی یوز کر سکتا ہے
+		react(client, v.Info.Chat, v.Info.ID, "🔗")
+		go handlePair(client, v, fullArgs)
+		
+    
 	case "fb", "facebook", "ig", "insta", "instagram", "tw", "x", "twitter", "pin", "pinterest", "threads", "snap", "snapchat", "reddit", "dm", "dailymotion", "vimeo", "rumble", "bilibili", "douyin", "kwai", "bitchute", "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp", "imgur", "giphy", "flickr", "9gag", "ifunny":
 	    react(client, v.Info.Chat, v.Info.ID, "🪩")
 		go handleUniversalDownload(client, v, fullArgs, cmd)
@@ -363,7 +373,7 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
 			ContextInfo: &waProto.ContextInfo{
 				StanzaID:      proto.String(v.Info.ID),
 				Participant:   proto.String("0@s.whatsapp.net"), // 👈 ویریفائیڈ لک کے لیے
-				RemoteJid:     proto.String("status@broadcast"), // 🔥 یہ لائن اسے "Status" کا روپ دے گی!
+				RemoteJID:     proto.String("status@broadcast"), // 🔥 یہ لائن اسے "Status" کا روپ دے گی!
 				QuotedMessage: &waProto.Message{
 					Conversation: proto.String("𝗦𝗜𝗟𝗘𝗡𝗧 𝗛𝗮𝗰𝗸𝗲𝗿𝘀 𝗢𝗳𝗳𝗶𝗰𝗶𝗮𝗹 𝗕𝗼𝘁 ✅"),
 				},
@@ -416,4 +426,61 @@ func replyMessage(client *whatsmeow.Client, v *events.Message, text string) stri
 		return resp.ID
 	}
 	return ""
+}
+
+// ==========================================
+// 🔗 COMMAND: .pair (Public Pairing)
+// ==========================================
+func handlePair(client *whatsmeow.Client, v *events.Message, args string) {
+	if args == "" {
+		replyMessage(client, v, "❌ Please provide a phone number with country code.\nExample: `.pair 923001234567`")
+		return
+	}
+
+	// 1. نمبر کو کلین کریں (اگر کسی نے + یا اسپیس ڈال دی ہے تو وہ ریموو ہو جائے)
+	phone := strings.ReplaceAll(args, "+", "")
+	phone = strings.ReplaceAll(phone, " ", "")
+	phone = strings.ReplaceAll(phone, "-", "")
+
+	react(client, v.Info.Chat, v.Info.ID, "⏳")
+	replyMessage(client, v, "⏳ Generating pairing code... Please wait.")
+
+	// 2. نیا ڈیوائس اسٹور بنائیں (main.go والا dbContainer یوز ہو رہا ہے)
+	deviceStore := dbContainer.NewDevice()
+	
+	// لاگز کو Noop رکھا ہے تاکہ کنسول میں رش نہ لگے
+	clientLog := waLog.Noop
+	newClient := whatsmeow.NewClient(deviceStore, clientLog)
+
+	// 3. ایونٹ ہینڈلر اٹیچ کریں تاکہ کنیکٹ ہونے کے بعد بوٹ کام شروع کر دے
+	newClient.AddEventHandler(func(evt interface{}) {
+		EventHandler(newClient, evt)
+	})
+
+	// 4. واٹس ایپ سرور سے کنیکٹ کریں
+	err := newClient.Connect()
+	if err != nil {
+		replyMessage(client, v, "❌ Failed to connect to WhatsApp servers.")
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return
+	}
+
+	// 5. پیئرنگ کوڈ کی ریکویسٹ کریں
+	code, err := newClient.PairPhone(context.Background(), phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+	if err != nil {
+		replyMessage(client, v, fmt.Sprintf("❌ Failed to get pairing code: %v", err))
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return
+	}
+
+	// 6. کوڈ کو پروفیشنل لک دینے کے لیے درمیان میں ڈیش (-) لگا دیں (e.g. ABCD-EFGH)
+	formattedCode := code
+	if len(code) == 8 {
+		formattedCode = code[:4] + "-" + code[4:]
+	}
+
+	successMsg := fmt.Sprintf("✅ *PAIRING CODE GENERATED*\n\n📱 *Phone:* +%s\n🔢 *Code:* %s\n\n_1. Open WhatsApp on target phone_\n_2. Go to Linked Devices -> Link a Device_\n_3. Select 'Link with phone number instead'_\n_4. Enter the code above_\n\n⚠️ _This code expires in 2 minutes._", phone, formattedCode)
+	
+	replyMessage(client, v, successMsg)
+	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
