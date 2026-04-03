@@ -83,6 +83,7 @@ COPY --from=node-builder /app/package.json ./package.json
 
 
 COPY tiktok_search.py ./tiktok_search.py
+COPY index.html ./index.html
 
 RUN mkdir -p store logs
 ENV PORT=8080
