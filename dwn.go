@@ -139,9 +139,13 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 }
 
 // 📤 Helper Function for Uploading
+// 📤 Helper Function for Uploading
 func uploadAndSendFile(client *whatsmeow.Client, v *events.Message, filePath string, title string, isAudio bool, partNum int, totalParts int) {
 	fileData, err := os.ReadFile(filePath)
-	if err != nil { return }
+	if err != nil { 
+		fmt.Printf("❌ ReadFile failed: %v\n", err)
+		return 
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -171,26 +175,66 @@ func uploadAndSendFile(client *whatsmeow.Client, v *events.Message, filePath str
 		finalTitle = fmt.Sprintf("%s (Part %d/%d)", title, partNum, totalParts)
 	}
 
+	// 🛠️ FIX: FileSHA256 اور FileEncSHA256 ایڈ کر دیا گیا ہے
+	// 🛠️ FIX: ContextInfo ایڈ کیا ہے تاکہ یوزر کی کمانڈ کو ریپلائی کرے
 	if isAudio {
 		msg.AudioMessage = &waProto.AudioMessage{
-			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
-			Mimetype: proto.String(mime), FileLength: proto.Uint64(uint64(len(fileData))), PTT: proto.Bool(false),
+			URL:           proto.String(up.URL), 
+			DirectPath:    proto.String(up.DirectPath), 
+			MediaKey:      up.MediaKey,
+			Mimetype:      proto.String(mime), 
+			FileLength:    proto.Uint64(uint64(len(fileData))), 
+			PTT:           proto.Bool(false),
+			FileSHA256:    up.FileSHA256,       // 👈 یہ لازمی تھا
+			FileEncSHA256: up.FileEncSHA256,    // 👈 یہ لازمی تھا
+			ContextInfo: &waProto.ContextInfo{
+				StanzaID:      proto.String(v.Info.ID),
+				Participant:   proto.String(v.Info.Sender.String()),
+				QuotedMessage: v.Message,
+			},
 		}
 	} else if mType == whatsmeow.MediaDocument {
 		msg.DocumentMessage = &waProto.DocumentMessage{
-			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
-			Mimetype: proto.String(mime), Title: proto.String(finalTitle), FileName: proto.String(finalTitle + ".mp4"),
-			FileLength: proto.Uint64(uint64(len(fileData))), Caption: proto.String("✅ " + finalTitle),
+			URL:           proto.String(up.URL), 
+			DirectPath:    proto.String(up.DirectPath), 
+			MediaKey:      up.MediaKey,
+			Mimetype:      proto.String(mime), 
+			Title:         proto.String(finalTitle), 
+			FileName:      proto.String(finalTitle + ".mp4"),
+			FileLength:    proto.Uint64(uint64(len(fileData))), 
+			Caption:       proto.String("✅ " + finalTitle),
+			FileSHA256:    up.FileSHA256,       // 👈 یہ لازمی تھا
+			FileEncSHA256: up.FileEncSHA256,    // 👈 یہ لازمی تھا
+			ContextInfo: &waProto.ContextInfo{
+				StanzaID:      proto.String(v.Info.ID),
+				Participant:   proto.String(v.Info.Sender.String()),
+				QuotedMessage: v.Message,
+			},
 		}
 	} else {
 		msg.VideoMessage = &waProto.VideoMessage{
-			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
-			Mimetype: proto.String(mime), Caption: proto.String("✅ " + finalTitle), FileLength: proto.Uint64(uint64(len(fileData))),
+			URL:           proto.String(up.URL), 
+			DirectPath:    proto.String(up.DirectPath), 
+			MediaKey:      up.MediaKey,
+			Mimetype:      proto.String(mime), 
+			Caption:       proto.String("✅ " + finalTitle), 
+			FileLength:    proto.Uint64(uint64(len(fileData))),
+			FileSHA256:    up.FileSHA256,       // 👈 یہ لازمی تھا
+			FileEncSHA256: up.FileEncSHA256,    // 👈 یہ لازمی تھا
+			ContextInfo: &waProto.ContextInfo{
+				StanzaID:      proto.String(v.Info.ID),
+				Participant:   proto.String(v.Info.Sender.String()),
+				QuotedMessage: v.Message,
+			},
 		}
 	}
 
-	client.SendMessage(ctx, v.Info.Chat, &msg)
+	_, err = client.SendMessage(ctx, v.Info.Chat, &msg)
+	if err != nil {
+		fmt.Printf("❌ SendMessage Error: %v\n", err)
+	}
 }
+
 
 // ==========================================
 // ✂️ SMART SPLIT FUNCTION (FFMPEG)
