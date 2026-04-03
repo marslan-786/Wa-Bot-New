@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt" // 🛠️ FIX: یہ مسنگ تھا جس کی وجہ سے ڈوکر کریش ہوا
 	"strings"
 	"time"
 
@@ -24,8 +25,6 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 		}
 
 		// 🔥 اصل گیم چینجر: پوری پروسیسنگ کو Goroutine میں ڈال دیں!
-		// اس ایک 'go' ورڈ کی وجہ سے آپ کا بوٹ کبھی بھی ہینگ یا ڈیلے نہیں ہوگا۔
-		// 1000 یوزر کمانڈ دیں گے تو 1000 بیک گراؤنڈ پروسیس چلیں گے۔
 		go processMessageAsync(client, v)
 	}
 }
@@ -37,10 +36,7 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	// 🛡️ BULLETPROOF RECOVERY: یہ بوٹ کو کبھی کریش نہیں ہونے دے گا
 	defer func() {
 		if r := recover(); r != nil {
-			// اگر کوئی یوزر خرافات بھیجے اور کوڈ پھٹے، تو بوٹ کریش ہونے کے بجائے صرف لاگ پرنٹ کرے گا
 			fmt.Printf("⚠️ [CRASH PREVENTED] Error in command by %s: %v\n", v.Info.Sender.User, r)
-			
-			// یوزر کو بتا دے گا کہ اس کی کمانڈ میں مسئلہ تھا (بوٹ بند نہیں ہوگا)
 			react(client, v.Info.Chat, v.Info.ID, "❌")
 		}
 	}()
@@ -61,6 +57,7 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	extMsg := v.Message.GetExtendedTextMessage()
 	if extMsg != nil && extMsg.ContextInfo != nil && extMsg.ContextInfo.StanzaID != nil {
 		qID := *extMsg.ContextInfo.StanzaID
+		// HandleMenuReplies 'downloader.go' فائل میں موجود ہے
 		if HandleMenuReplies(client, v, bodyClean, qID) {
 			return 
 		}
@@ -89,7 +86,6 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		sendMainMenu(client, v)
 
 	case "play", "song":
-		// یہاں بھی فنکشن کو go کے ساتھ کال کریں تاکہ یہ تھریڈ بھی فری ہو جائے
 		go handlePlayMusic(client, v, fullArgs)
 
 	case "yt", "youtube":
@@ -103,11 +99,9 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 
 	case "tts":
 		go handleTTSearch(client, v, fullArgs)
-	case "video":
-		// 'go' لگایا ہے تاکہ سرور ایک ملی سیکنڈ کے لیے بھی نہ رکے
-		go handleVideoSearch(client, v, fullArgs)
-		
 
+	case "video":
+		go handleVideoSearch(client, v, fullArgs)
 	}
 }
 
@@ -118,14 +112,14 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message) {
 	menu := `❖ ── ✦ 𝗦𝗜𝗟𝗘𝗡𝗧 𝙃𝙖𝙘𝙠𝙚𝙧𝙨 ✦ ── ❖
  
  👤 𝗢𝘄𝗻𝗲𝗿: 𝗦𝗜𝗟𝗘𝗡𝗧 𝙃𝙖𝙘𝙠𝙚𝙧𝙨
- ⚙️ 𝗠𝗼𝗱𝗲: public
+ ⚙️ 𝗠𝗼𝗱𝗲: Public
 
- ╭── ✦ [ 𝗠𝗘𝗗𝗜𝗔 𝗛𝗨𝗕 ] ✦ ──╮
+ ╭── ✦ [ 𝗬𝗢𝗨𝗧𝗨𝗕𝗘 𝗠𝗘𝗡𝗨 ] ✦ ──╮
  │ 
- │ ➭ *.play/.song* [song name]
+ │ ➭ *.play / .song* [name]
  │    _Direct HQ Audio Download_
  │
- │ ➭ *.video* [song name]
+ │ ➭ *.video* [name]
  │    _Direct HD Video Download_
  │
  │ ➭ *.yt* [youtube link]
@@ -134,6 +128,10 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message) {
  │ ➭ *.yts* [search query]
  │    _Search YouTube Videos_
  │
+ ╰──────────────────────╯
+
+ ╭── ✦ [ 𝗧𝗜𝗞𝗧𝗢𝗞 𝗠𝗘𝗡𝗨 ] ✦ ──╮
+ │ 
  │ ➭ *.tt* [tiktok link]
  │    _No-Watermark TT Video_
  │
@@ -142,6 +140,19 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message) {
  │
  │ ➭ *.tts* [search query]
  │    _Search TikTok Trends_
+ │
+ ╰──────────────────────╯
+
+ ╭── ✦ [ 𝗢𝗪𝗡𝗘𝗥 𝗠𝗘𝗡𝗨 ] ✦ ──╮
+ │ 
+ │ ➭ *.pair* [number]
+ │    _Connect New Bot Session_
+ │
+ │ ➭ *.anticall* [on/off]
+ │    _Block & Delete Calls_
+ │
+ │ ➭ *.antidm* [on/off]
+ │    _Block Unsaved Numbers_
  │
  ╰──────────────────────╯
 
