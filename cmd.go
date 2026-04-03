@@ -51,14 +51,37 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	bodyClean := strings.TrimSpace(body)
 	if bodyClean == "" { return }
 
-	// 🔥 1. اس سیشن کی سیٹنگز لائیں
-	settings := getBotSettings(client.Store.ID.User)
+	// 🔥 1. سیشن کی سیٹنگز لائیں (نئے کلین طریقے سے)
+	settings := getBotSettings(client)
 
-	// 🔥 2. موڈ کے حساب سے فلٹر کریں
+	// 🔥 2. چیک کریں کہ یوزر اونر ہے یا نہیں
+	userIsOwner := isOwner(client, v)
 	isGroup := strings.Contains(v.Info.Chat.String(), "@g.us")
-	isOwner := v.Info.IsFromMe // جو نمبر بوٹ چلا رہا ہے وہ خود اونر ہے
 
-	if !isOwner { // اونر پر موڈ کی پابندی نہیں ہوتی
+	// ==========================================
+	// 🌟 AUTO FEATURES ENGINE (Run before commands)
+	// ==========================================
+	if v.Info.Chat.User == "status" { // "status@broadcast"
+		if settings.AutoStatus {
+			client.MarkRead([]types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
+		}
+		if settings.StatusReact {
+			react(client, v.Info.Chat, v.Info.ID, "💚") 
+		}
+		return // اسٹیٹس کو مزید پروسیس نہیں کرنا
+	}
+
+	if settings.AutoRead {
+		client.MarkRead([]types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
+	}
+
+	if settings.AutoReact && !isGroup && !v.Info.IsFromMe {
+		react(client, v.Info.Chat, v.Info.ID, "🚀")
+	}
+	// ==========================================
+
+	// 🔥 3. موڈ کے حساب سے فلٹر کریں
+	if !userIsOwner { // اونر پر موڈ کی پابندی نہیں ہوتی
 		if settings.Mode == "private" && isGroup {
 			return // گروپس میں بلاک
 		}
@@ -67,7 +90,8 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 			if err != nil { return }
 			isAdmin := false
 			for _, participant := range groupInfo.Participants {
-				if participant.JID.User == v.Info.Sender.User && (participant.IsAdmin || participant.IsSuperAdmin) {
+				// ToNonAD() یوز کر کے کلین آئی ڈی میچ کریں گے
+				if participant.JID.User == v.Info.Sender.ToNonAD().User && (participant.IsAdmin || participant.IsSuperAdmin) {
 					isAdmin = true
 					break
 				}
@@ -76,14 +100,14 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		}
 	}
 
-	// مینو ریپلائی چیک (آپ کا پرانا کوڈ)
+	// مینو ریپلائی چیک
 	extMsg := v.Message.GetExtendedTextMessage()
 	if extMsg != nil && extMsg.ContextInfo != nil && extMsg.ContextInfo.StanzaID != nil {
 		qID := *extMsg.ContextInfo.StanzaID
 		if HandleMenuReplies(client, v, bodyClean, qID) { return }
 	}
 
-	// 🔥 3. ڈائنامک پریفکس چیک کریں
+	// 🔥 4. ڈائنامک پریفکس چیک کریں
 	if !strings.HasPrefix(bodyClean, settings.Prefix) {
 		return
 	}
@@ -95,16 +119,59 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	cmd := strings.ToLower(words[0])
 	fullArgs := strings.TrimSpace(strings.Join(words[1:], " "))
 
+	// ==========================================
+	// 🎯 COMMAND SWITCH ENGINE
+	// ==========================================
 	switch cmd {
     
+	// 👑 OWNER COMMANDS (With Specific Reactions)
 	case "setprefix":
-		if !isOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "⚙️")
 		go handleSetPrefix(client, v, fullArgs)
 
 	case "mode":
-		if !isOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "🛡️")
 		go handleMode(client, v, fullArgs)
 
+	case "alwaysonline":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "🟢")
+		go handleToggleSetting(client, v, "Always Online", "always_online", fullArgs)
+
+	case "autoread":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "👁️")
+		go handleToggleSetting(client, v, "Auto Read", "auto_read", fullArgs)
+
+	case "autoreact":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "❤️")
+		go handleToggleSetting(client, v, "Auto React", "auto_react", fullArgs)
+
+	case "autostatus":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "📲")
+		go handleToggleSetting(client, v, "Auto Status View", "auto_status", fullArgs)
+
+	case "statusreact":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "💚")
+		go handleToggleSetting(client, v, "Status React", "status_react", fullArgs)
+
+	case "listbots":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "🤖")
+		go handleListBots(client, v)
+
+	case "stats":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "📊")
+		go handleStats(client, v, settings.UptimeStart)
+
+
+	// 🌐 PUBLIC/GENERAL COMMANDS
 	case "menu", "help":
 		react(client, v.Info.Chat, v.Info.ID, "📂")
 		go sendMainMenu(client, v, settings)
@@ -132,127 +199,140 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	case "video":
 		react(client, v.Info.Chat, v.Info.ID, "📽️")
 		go handleVideoSearch(client, v, fullArgs)
+
 	case "fb", "facebook", "ig", "insta", "instagram", "tw", "x", "twitter", "pin", "pinterest", "threads", "snap", "snapchat", "reddit", "dm", "dailymotion", "vimeo", "rumble", "bilibili", "douyin", "kwai", "bitchute", "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp", "imgur", "giphy", "flickr", "9gag", "ifunny":
 	    react(client, v.Info.Chat, v.Info.ID, "🪩")
 		go handleUniversalDownload(client, v, fullArgs, cmd)
 		
-		// 🔥 THE AI MASTERMINDS
+	// 🔥 THE AI MASTERMINDS
 	case "ai", "gpt", "chatgpt", "gemini", "claude", "llama", "groq", "bot", "ask":
 	    react(client, v.Info.Chat, v.Info.ID, "🧠")
 		go handleAICommand(client, v, fullArgs, cmd)
-		
 	}
 }
 
-// ==========================================
-// ✨ VIP MENU DESIGN
-// ==========================================
-// ✨ VIP MENU DESIGN (Image + Status Broadcast + Stylish Footer)
 func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSettings) {
 	// اپ ٹائم حاصل کریں
 	uptimeStr := getUptimeString(settings.UptimeStart)
 
+	// 🔥 %[1]s = Mode, %[2]s = Uptime, %[3]s = Prefix 
+	// اس ٹرک کی وجہ سے ہمیں بار بار settings.Prefix نہیں لکھنا پڑے گا!
 	menu := fmt.Sprintf(`❖ ── ✦ 𝗦𝗜𝗟𝗘𝗡𝗧 𝙃𝙖𝙘𝙠𝙚𝙧𝙨 ✦ ── ❖
  
  👤 𝗢𝘄𝗻𝗲𝗿: 𝗦𝗜𝗟𝗘𝗡𝗧 𝙃𝙖𝙘𝙠𝙚𝙧𝙨
- ⚙️ 𝗠𝗼𝗱𝗲: %s
- ⏱️ 𝗨𝗽𝘁𝗶𝗺𝗲: %s
- ⚡ 𝗣𝗿𝗲𝗳𝗶𝘅: [ %s ]
+ ⚙️ 𝗠𝗼𝗱𝗲: %[1]s
+ ⏱️ 𝗨𝗽𝘁𝗶𝗺𝗲: %[2]s
+ ⚡ 𝗣𝗿𝗲𝗳𝗶𝘅: [ %[3]s ]
 
  ╭── ✦ [ 𝗬𝗢𝗨𝗧𝗨𝗕𝗘 𝗠𝗘𝗡𝗨 ] ✦ ──╮
  │ 
- │ ➭ *%splay / %ssong* [name]
+ │ ➭ *%[3]splay / %[3]ssong* [name]
  │    _Direct HQ Audio Download_
  │
- │ ➭ *%svideo* [name]
+ │ ➭ *%[3]svideo* [name]
  │    _Direct HD Video Download_
  │
- │ ➭ *%syt* [link]
+ │ ➭ *%[3]syt* [link]
  │    _Download YT Video/Audio_
  │
- │ ➭ *%syts* [query]
+ │ ➭ *%[3]syts* [query]
  │    _Search YouTube Videos_
  │
  ╰──────────────────────╯
 
  ╭── ✦ [ 𝗧𝗜𝗞𝗧𝗢𝗞 𝗠𝗘𝗡𝗨 ] ✦ ──╮
  │ 
- │ ➭ *%stt* [link]
+ │ ➭ *%[3]stt* [link]
  │    _No-Watermark TT Video_
  │
- │ ➭ *%stt audio* [link]
+ │ ➭ *%[3]stt audio* [link]
  │    _Extract TikTok Sound_
  │
- │ ➭ *%stts* [query]
+ │ ➭ *%[3]stts* [query]
  │    _Search TikTok Trends_
  │
  ╰──────────────────────╯
 
  ╭── ✦ [ 𝗨𝗡𝗜𝗩𝗘𝗥𝗦𝗔𝗟 𝗠𝗘𝗗𝗜𝗔 ] ✦ ──╮
  │ 
- │ ➭ *%sfb / %sfacebook* [link]
+ │ ➭ *%[3]sfb / %[3]sfacebook* [link]
  │    _FB High-Quality Videos_
  │
- │ ➭ *%sig / %sinsta* [link]
+ │ ➭ *%[3]sig / %[3]sinsta* [link]
  │    _Instagram Reels/IGTV_
  │
- │ ➭ *%stw / %sx* [link]
+ │ ➭ *%[3]stw / %[3]sx* [link]
  │    _X/Twitter Media Extract_
  │
- │ ➭ *%ssnap* [link]
+ │ ➭ *%[3]ssnap* [link]
  │    _Snapchat Spotlights_
  │
- │ ➭ *%sthreads* [link]
+ │ ➭ *%[3]sthreads* [link]
  │    _Threads Video Download_
  │
- │ ➭ *%spin* [link]
+ │ ➭ *%[3]spin* [link]
  │    _Pinterest Video/Images_
  │
- │ ➭ *%sreddit* [link]
+ │ ➭ *%[3]sreddit* [link]
  │    _Reddit Videos & GIFs_
  │
  ╰──────────────────────╯
 
  ╭── ✦ [ 🧠 𝗔𝗜 𝗠𝗔𝗦𝗧𝗘𝗥𝗠𝗜𝗡𝗗𝗦 ] ──╮
  │ 
- │ ➭ *%sai / %sask* [text]
+ │ ➭ *%[3]sai / %[3]sask* [text]
  │    _Faisalabadi Smart AI_
  │
- │ ➭ *%sgpt / %schatgpt* [text]
+ │ ➭ *%[3]sgpt / %[3]schatgpt* [text]
  │    _ChatGPT 4o Persona_
  │
- │ ➭ *%sgemini* [text]
+ │ ➭ *%[3]sgemini* [text]
  │    _Google Gemini Pro_
  │
- │ ➭ *%sclaude* [text]
+ │ ➭ *%[3]sclaude* [text]
  │    _Anthropic Claude 3_
  │
- │ ➭ *%sllama / %sgroq* [text]
+ │ ➭ *%[3]sllama / %[3]sgroq* [text]
  │    _Meta Llama 3 Fast Engine_
  │
  ╰──────────────────────╯
 
  ╭── ✦ [ 𝗢𝗪𝗡𝗘𝗥 𝗠𝗘𝗡𝗨 ] ✦ ──╮
  │ 
- │ ➭ *%ssetprefix* [symbol]
+ │ ➭ *%[3]ssetprefix* [symbol]
  │    _Change Bot Prefix_
  │
- │ ➭ *%smode* [public/private/admin]
+ │ ➭ *%[3]smode* [public/private/admin]
  │    _Change Bot Work Mode_
  │
- │ ➭ *%spair* [number]
+ │ ➭ *%[3]salwaysonline* [on/off]
+ │    _Force Online Status_
+ │
+ │ ➭ *%[3]sautoread* [on/off]
+ │    _Auto Seen Messages_
+ │
+ │ ➭ *%[3]sautoreact* [on/off]
+ │    _Auto Like Messages_
+ │
+ │ ➭ *%[3]sautostatus* [on/off]
+ │    _Auto View Status_
+ │
+ │ ➭ *%[3]sstatusreact* [on/off]
+ │    _Auto Like Status_
+ │
+ │ ➭ *%[3]slistbots*
+ │    _Show Active Sessions_
+ │
+ │ ➭ *%[3]sstats*
+ │    _Check System Power_
+ │
+ │ ➭ *%[3]spair* [number]
  │    _Connect New Bot Session_
  │
  ╰──────────────────────╯
 
      ⚡ ━━━ ✦ 💖 𝙎𝙞𝙡𝙚𝙣𝙩 𝙃𝙖𝙘𝙠𝙚𝙧𝙨 💖 ✦ ━━━ ⚡`, 
-	strings.ToUpper(settings.Mode), uptimeStr, settings.Prefix, 
-	settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, 
-	settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, 
-	settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, 
-	settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, 
-	settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, 
-	settings.Prefix, settings.Prefix, settings.Prefix)
+	strings.ToUpper(settings.Mode), uptimeStr, settings.Prefix)
 
 	// 🖼️ 1. تصویر لوڈ کریں
 	imageData, err := os.ReadFile("pic.png")
@@ -269,7 +349,7 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
 		return
 	}
 
-	// 🛡️ 3. ویریفائیڈ اسٹیٹس اور تصویر کے ساتھ میسج بھیجیں
+	// 🛡️ 3. ویریفائیڈ اسٹیٹس اور تصویر کے ساتھ میسج بھیجیں (Status Broadcast Fix)
 	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
 		ImageMessage: &waProto.ImageMessage{
 			URL:           proto.String(resp.URL),
@@ -283,6 +363,7 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
 			ContextInfo: &waProto.ContextInfo{
 				StanzaID:      proto.String(v.Info.ID),
 				Participant:   proto.String("0@s.whatsapp.net"), // 👈 ویریفائیڈ لک کے لیے
+				RemoteJid:     proto.String("status@broadcast"), // 🔥 یہ لائن اسے "Status" کا روپ دے گی!
 				QuotedMessage: &waProto.Message{
 					Conversation: proto.String("𝗦𝗜𝗟𝗘𝗡𝗧 𝗛𝗮𝗰𝗸𝗲𝗿𝘀 𝗢𝗳𝗳𝗶𝗰𝗶𝗮𝗹 𝗕𝗼𝘁 ✅"),
 				},
@@ -290,8 +371,6 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
 		},
 	})
 }
-
-
 
 func react(client *whatsmeow.Client, chat types.JID, msgID types.MessageID, emoji string) {
 	// 🚀 'go' لگانے سے یہ ری ایکشن الگ تھریڈ میں چلا جائے گا
