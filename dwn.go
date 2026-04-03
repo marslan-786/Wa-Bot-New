@@ -19,9 +19,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-
 // ==========================================
-// 🛡️ STATE CACHES (Shared with commands.go)
+// 🛡️ STATE CACHES
 // ==========================================
 type MediaSession struct {
 	Results  []SearchResult
@@ -43,7 +42,7 @@ var ttSearchCache = make(map[string]MediaSession)
 var ytQualityCache = make(map[string]YTDownloadState)
 
 // ==========================================
-// 🌐 MASTER API DOWNLOADER
+// 🌐 CONSTANTS & API STRUCTS
 // ==========================================
 type APIResponse struct {
 	Success     bool   `json:"success"`
@@ -52,26 +51,18 @@ type APIResponse struct {
 	DownloadURL string `json:"download_url"`
 }
 
-// ==========================================
-// 🌐 MASTER API DOWNLOADER (Crash-Proof Edition)
-// ==========================================
-
-
-// واٹس ایپ کی سیف لمٹ: 1.8 GB (بائٹس میں)
 // واٹس ایپ کی سیف لمٹ: 1.8 GB (بائٹس میں)
 const MaxWhatsAppSize int64 = 1932735283 // 1.8 GB in bytes
 const SafeMarginMB = 1800.0
 
-
 // ==========================================
-// 🌐 MASTER API DOWNLOADER (With Disk Streaming & Splitting)
+// 🚀 1. API DOWNLOADER (For YT & TikTok)
 // ==========================================
 func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, resolution string, isAudio bool) {
 	react(client, v.Info.Chat, v.Info.ID, "⬇️")
 
 	httpClient := &http.Client{Timeout: 5 * time.Minute}
 
-	// 1. API Call
 	apiUrl := fmt.Sprintf("https://silent-yt-dwn.up.railway.app/api/download?url=%s&resolution=%s", targetUrl, resolution)
 	resp, err := httpClient.Get(apiUrl)
 	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
@@ -82,12 +73,10 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 		react(client, v.Info.Chat, v.Info.ID, "❌"); return
 	}
 
-	// 2. Download File
 	fileResp, err := httpClient.Get(apiRes.DownloadURL)
 	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 	defer fileResp.Body.Close()
 
-	// 💾 RAM بچانے کے لیے فائل کو سیدھا ڈسک پر سیو کریں
 	ext := ".mp4"
 	if isAudio { ext = ".mp3" }
 	tempFileName := fmt.Sprintf("./data/temp_%d%s", time.Now().UnixNano(), ext)
@@ -99,10 +88,8 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	outFile.Close()
 	if err != nil { os.Remove(tempFileName); react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 
-	// صفائی کا خاص خیال: فنکشن ختم ہونے پر اصل فائل ڈیلیٹ ہو جائے
 	defer os.Remove(tempFileName)
 
-	// 3. سائز چیک اور اسپلٹنگ (Size Check & Splitting)
 	fileInfo, err := os.Stat(tempFileName)
 	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 	
@@ -110,11 +97,9 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	var filesToSend []string
 
 	if fileSize > MaxWhatsAppSize && !isAudio {
-		react(client, v.Info.Chat, v.Info.ID, "✂️") // اسپلٹنگ کا ری ایکشن
-		
+		react(client, v.Info.Chat, v.Info.ID, "✂️") 
 		parts, err := splitVideoSmart(tempFileName, SafeMarginMB)
 		if err != nil || len(parts) == 0 {
-			// اگر کاٹنے میں کوئی مسئلہ آیا تو اوریجنل فائل ہی بھیجنے کی کوشش کریں گے
 			filesToSend = append(filesToSend, tempFileName)
 		} else {
 			filesToSend = parts
@@ -125,11 +110,8 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 
 	react(client, v.Info.Chat, v.Info.ID, "📤")
 
-	// 4. اپلوڈ اور سینڈ کریں
 	for i, filePath := range filesToSend {
 		uploadAndSendFile(client, v, filePath, apiRes.Title, isAudio, i+1, len(filesToSend))
-		
-		// اگر کاٹے گئے ٹکڑے تھے، تو بھیجنے کے بعد انہیں ڈیلیٹ کر دیں
 		if filePath != tempFileName {
 			os.Remove(filePath)
 		}
@@ -138,8 +120,173 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
 
-// 📤 Helper Function for Uploading
-// 📤 Helper Function for Uploading
+// ==========================================
+// 🚀 2. UNIVERSAL YT-DLP DOWNLOADER (For FB, Insta, etc.)
+// ==========================================
+func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mode string, optionalFormat ...string) {
+	// بیک گراؤنڈ کلین اپ
+	go func() {
+		files, _ := filepath.Glob("*.*")
+		for _, f := range files {
+			if strings.HasSuffix(f, ".mp4") || strings.HasSuffix(f, ".mp3") || strings.HasPrefix(f, "temp_") {
+				info, err := os.Stat(f)
+				if err == nil && time.Since(info.ModTime()) > 5*time.Minute {
+					os.Remove(f)
+				}
+			}
+		}
+	}()
+	
+	react(client, v.Info.Chat, v.Info.ID, "⬇️")
+
+	isYouTube := strings.Contains(strings.ToLower(targetUrl), "youtu")
+	defaultUA := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+	
+	cmdTitle := exec.Command("yt-dlp", "--get-title", "--no-playlist", "--user-agent", defaultUA, targetUrl)
+	titleOut, _ := cmdTitle.Output()
+
+	cleanTitle := "Media_File"
+	if len(titleOut) > 0 {
+		cleanTitle = strings.TrimSpace(string(titleOut))
+		cleanTitle = strings.Map(func(r rune) rune {
+			if strings.ContainsRune(`/\?%*:|"<>`, r) { return '-' }
+			return r
+		}, cleanTitle)
+	}
+
+	tempFileName := fmt.Sprintf("temp_%d.mp4", time.Now().UnixNano())
+	formatArg := "bestvideo+bestaudio/best"
+	
+	if len(optionalFormat) > 0 && optionalFormat[0] != "" {
+		formatArg = optionalFormat[0]
+	}
+
+	isAudio := false
+	if mode == "audio" {
+		isAudio = true
+		tempFileName = strings.Replace(tempFileName, ".mp4", ".mp3", 1)
+	}
+
+	type ytConfig struct {
+		ClientType string
+		UserAgent  string
+	}
+	rotationPool := []ytConfig{
+		{"android", "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"},
+		{"ios", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},
+		{"web", defaultUA},
+	}
+
+	var downloadErr error
+	var rawErrorOutput string
+	maxAttempts := 5
+	if !isYouTube { maxAttempts = 2 }
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		commonArgs := []string{
+			"--no-playlist",
+			"--force-ipv4",
+			"--no-check-certificate",
+			"--geo-bypass",
+		}
+
+		if attempt > 0 {
+			commonArgs = append(commonArgs, "--rm-cache-dir")
+		}
+
+		if isYouTube {
+			currentConfig := rotationPool[attempt % len(rotationPool)]
+			commonArgs = append(commonArgs, "--user-agent", currentConfig.UserAgent)
+			commonArgs = append(commonArgs, "--extractor-args", "youtube:player_client="+currentConfig.ClientType)
+		} else {
+			// ہیوی بائی پاس ہیڈرز
+			commonArgs = append(commonArgs, 
+				"--user-agent", defaultUA,
+				"--add-header", "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+				"--add-header", "Accept-Language: en-US,en;q=0.5",
+				"--add-header", "Sec-Fetch-Dest: document",
+				"--add-header", "Sec-Fetch-Mode: navigate",
+				"--add-header", "Sec-Fetch-Site: cross-site",
+				"--add-header", "Upgrade-Insecure-Requests: 1",
+			)
+			if !isAudio && (len(optionalFormat) == 0 || optionalFormat[0] == "") {
+				formatArg = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+			}
+		}
+
+		var args []string
+		if isAudio {
+			args = append(commonArgs, "-f", "bestaudio/best", "--extract-audio", "--audio-format", "mp3", "--audio-quality", "192K", "-o", tempFileName, targetUrl)
+		} else {
+			args = append(commonArgs, "-f", formatArg, "--merge-output-format", "mp4", "-o", tempFileName, targetUrl)
+		}
+
+		cmd := exec.Command("yt-dlp", args...)
+		var stderr bytes.Buffer
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+		
+		downloadErr = cmd.Run()
+
+		if downloadErr == nil {
+			break
+		}
+		
+		rawErrorOutput = strings.TrimSpace(stderr.String())
+		if attempt == 0 {
+			go exec.Command("yt-dlp", "-U").Run()
+		}
+	}
+
+	if downloadErr != nil {
+		fmt.Printf("❌ Download Error permanently: %v\n", downloadErr)
+		if len(rawErrorOutput) > 3000 {
+			rawErrorOutput = rawErrorOutput[:3000] + "\n...[Truncated]"
+		}
+		replyMessage(client, v, fmt.Sprintf("❌ *Download Error:*\n```\n%s\n```", rawErrorOutput))
+		return
+	}
+
+	finalExt := ".mp4"
+	if isAudio { finalExt = ".mp3" }
+	finalPath := cleanTitle + finalExt
+	os.Rename(tempFileName, finalPath)
+
+	defer os.Remove(finalPath) // فنکشن ختم ہونے پر ڈیلیٹ
+
+	fileInfo, err := os.Stat(finalPath)
+	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	
+	fileSize := fileInfo.Size()
+	var filesToSend []string
+
+	if fileSize > MaxWhatsAppSize && !isAudio {
+		react(client, v.Info.Chat, v.Info.ID, "✂️") 
+		parts, err := splitVideoSmart(finalPath, SafeMarginMB)
+		if err != nil || len(parts) == 0 {
+			filesToSend = append(filesToSend, finalPath)
+		} else {
+			filesToSend = parts
+		}
+	} else {
+		filesToSend = append(filesToSend, finalPath)
+	}
+
+	react(client, v.Info.Chat, v.Info.ID, "📤")
+
+	// 💥 سیدھا آپ کا اپنا سینڈنگ فنکشن استعمال ہو رہا ہے!
+	for i, filePath := range filesToSend {
+		uploadAndSendFile(client, v, filePath, cleanTitle, isAudio, i+1, len(filesToSend))
+		if filePath != finalPath {
+			os.Remove(filePath)
+		}
+	}
+
+	react(client, v.Info.Chat, v.Info.ID, "✅")
+}
+
+// ==========================================
+// 📤 3. CORE UPLOAD & SEND FUNCTION
+// ==========================================
 func uploadAndSendFile(client *whatsmeow.Client, v *events.Message, filePath string, title string, isAudio bool, partNum int, totalParts int) {
 	fileData, err := os.ReadFile(filePath)
 	if err != nil { 
@@ -155,7 +302,6 @@ func uploadAndSendFile(client *whatsmeow.Client, v *events.Message, filePath str
 	if isAudio { 
 		mType = whatsmeow.MediaAudio; mime = "audio/mpeg" 
 	} else { 
-		// اگر فائل بہت بڑی ہو تو اسے Document کے طور پر بھیجیں تاکہ واٹس ایپ ریجیکٹ نہ کرے
 		if len(fileData) > 90*1024*1024 {
 			mType = whatsmeow.MediaDocument; mime = "video/mp4"
 		} else {
@@ -175,8 +321,6 @@ func uploadAndSendFile(client *whatsmeow.Client, v *events.Message, filePath str
 		finalTitle = fmt.Sprintf("%s (Part %d/%d)", title, partNum, totalParts)
 	}
 
-	// 🛠️ FIX: FileSHA256 اور FileEncSHA256 ایڈ کر دیا گیا ہے
-	// 🛠️ FIX: ContextInfo ایڈ کیا ہے تاکہ یوزر کی کمانڈ کو ریپلائی کرے
 	if isAudio {
 		msg.AudioMessage = &waProto.AudioMessage{
 			URL:           proto.String(up.URL), 
@@ -185,8 +329,8 @@ func uploadAndSendFile(client *whatsmeow.Client, v *events.Message, filePath str
 			Mimetype:      proto.String(mime), 
 			FileLength:    proto.Uint64(uint64(len(fileData))), 
 			PTT:           proto.Bool(false),
-			FileSHA256:    up.FileSHA256,       // 👈 یہ لازمی تھا
-			FileEncSHA256: up.FileEncSHA256,    // 👈 یہ لازمی تھا
+			FileSHA256:    up.FileSHA256,       
+			FileEncSHA256: up.FileEncSHA256,    
 			ContextInfo: &waProto.ContextInfo{
 				StanzaID:      proto.String(v.Info.ID),
 				Participant:   proto.String(v.Info.Sender.String()),
@@ -203,8 +347,8 @@ func uploadAndSendFile(client *whatsmeow.Client, v *events.Message, filePath str
 			FileName:      proto.String(finalTitle + ".mp4"),
 			FileLength:    proto.Uint64(uint64(len(fileData))), 
 			Caption:       proto.String("✅ " + finalTitle),
-			FileSHA256:    up.FileSHA256,       // 👈 یہ لازمی تھا
-			FileEncSHA256: up.FileEncSHA256,    // 👈 یہ لازمی تھا
+			FileSHA256:    up.FileSHA256,       
+			FileEncSHA256: up.FileEncSHA256,    
 			ContextInfo: &waProto.ContextInfo{
 				StanzaID:      proto.String(v.Info.ID),
 				Participant:   proto.String(v.Info.Sender.String()),
@@ -219,8 +363,8 @@ func uploadAndSendFile(client *whatsmeow.Client, v *events.Message, filePath str
 			Mimetype:      proto.String(mime), 
 			Caption:       proto.String("✅ " + finalTitle), 
 			FileLength:    proto.Uint64(uint64(len(fileData))),
-			FileSHA256:    up.FileSHA256,       // 👈 یہ لازمی تھا
-			FileEncSHA256: up.FileEncSHA256,    // 👈 یہ لازمی تھا
+			FileSHA256:    up.FileSHA256,       
+			FileEncSHA256: up.FileEncSHA256,    
 			ContextInfo: &waProto.ContextInfo{
 				StanzaID:      proto.String(v.Info.ID),
 				Participant:   proto.String(v.Info.Sender.String()),
@@ -235,36 +379,29 @@ func uploadAndSendFile(client *whatsmeow.Client, v *events.Message, filePath str
 	}
 }
 
-
 // ==========================================
-// ✂️ SMART SPLIT FUNCTION (FFMPEG)
+// ✂️ 4. SMART SPLIT FUNCTION (FFMPEG)
 // ==========================================
 func splitVideoSmart(inputPath string, targetMB float64) ([]string, error) {
-	// 1. ویڈیو کی کل Duration (Seconds) حاصل کریں
 	cmd := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", inputPath)
 	out, err := cmd.Output()
 	if err != nil { return nil, err }
 	
 	durationSec, _ := strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
 	
-	// 2. فائل کا سائز ایم بی میں نکالیں
 	info, _ := os.Stat(inputPath)
 	totalSizeMB := float64(info.Size()) / (1024 * 1024)
 	
-	// 3. کیلکولیشن: (TargetMB / TotalMB) * TotalDuration
 	chunkDuration := (targetMB / totalSizeMB) * durationSec
-	
-	// سیف مارجن کے لیے 5% کم رکھیں
-	chunkDuration = chunkDuration * 0.95
+	chunkDuration = chunkDuration * 0.95 // 5% Safe margin
 
 	fmt.Printf("✂️ Splitting video. Total: %.2f MB, Target: %.2f MB, Chunk Time: %.0f sec\n", totalSizeMB, targetMB, chunkDuration)
 
 	outputPattern := strings.Replace(inputPath, ".mp4", "_part%03d.mp4", 1)
 	
-	// 4. FFmpeg سے ویڈیو کو بغیر کوالٹی گرائے کاٹیں
 	splitCmd := exec.Command("ffmpeg", 
 		"-i", inputPath, 
-		"-c", "copy",          // Re-encode نہیں کریں گے تاکہ فوراً کام ہو جائے
+		"-c", "copy",          
 		"-map", "0", 
 		"-f", "segment", 
 		"-segment_time", fmt.Sprintf("%.0f", chunkDuration), 
@@ -276,15 +413,13 @@ func splitVideoSmart(inputPath string, targetMB float64) ([]string, error) {
 		return nil, err
 	}
 
-	// 5. تمام کاٹے گئے ٹکڑوں کی لسٹ بنا کر واپس بھیجیں
 	baseName := strings.TrimSuffix(outputPattern, "%03d.mp4")
 	files, _ := filepath.Glob(baseName + "*")
 	return files, nil
 }
 
-
 // ==========================================
-// 📺 YOUTUBE SEARCH MENU (NEW UI)
+// 🎯 5. COMMAND HANDLERS & MENUS
 // ==========================================
 func handleYTS(client *whatsmeow.Client, v *events.Message, query string) {
 	if query == "" { return }
@@ -297,9 +432,7 @@ func handleYTS(client *whatsmeow.Client, v *events.Message, query string) {
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	var results []SearchResult
 	
-	// NEW ELEGANT DESIGN
 	menuText := "❖ ── ✦ 𝗬𝗢𝗨𝗧𝗨𝗕𝗘 𝗦𝗘𝗔𝗥𝗖𝗛 ✦ ── ❖\n\n"
-
 	icons := []string{"❶", "❷", "❸", "❹", "❺"}
 	count := 0
 	for _, line := range lines {
@@ -321,11 +454,7 @@ func handleYTS(client *whatsmeow.Client, v *events.Message, query string) {
 	ytSearchCache[msgID] = MediaSession{Results: results, SenderID: v.Info.Sender.User}
 }
 
-// ==========================================
-// 🎯 YOUTUBE QUALITY MENU (NEW UI)
-// ==========================================
 func handleYTQualityMenu(client *whatsmeow.Client, v *events.Message, ytUrl string) {
-	// NEW ELEGANT DESIGN
 	menu := `❖ ── ✦ 𝗤𝗨𝗔𝗟𝗜𝗧𝗬 ✦ ── ❖
 
  ❶  144p  (Low)
@@ -340,9 +469,6 @@ func handleYTQualityMenu(client *whatsmeow.Client, v *events.Message, ytUrl stri
 	ytQualityCache[msgID] = YTDownloadState{Url: ytUrl, SenderID: v.Info.Sender.User}
 }
 
-// ==========================================
-// 🎵 TIKTOK SEARCH MENU (NEW UI)
-// ==========================================
 func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	if query == "" { return }
 	react(client, v.Info.Chat, v.Info.ID, "🔍")
@@ -360,7 +486,7 @@ func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	icons := []string{"❶", "❷", "❸", "❹", "❺", "❻", "❼", "❽", "❾", "❿"}
 	
 	limit := len(results)
-	if limit > 5 { limit = 5 } // Showing top 5 to keep it clean
+	if limit > 5 { limit = 5 } 
 
 	for i := 0; i < limit; i++ {
 		menuText += fmt.Sprintf(" %s %s\n\n", icons[i], results[i].Title)
@@ -371,10 +497,10 @@ func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	ttSearchCache[msgID] = MediaSession{Results: results[:limit], SenderID: v.Info.Sender.User}
 }
 
-// ==========================================
-// 🔄 MENU REPLY INTERCEPTOR
-// ==========================================
 func HandleMenuReplies(client *whatsmeow.Client, v *events.Message, bodyClean string, qID string) bool {
+    if HandleAIChatReply(client, v, bodyClean, qID) {
+		return true
+	}
 	
 	if session, ok := ytSearchCache[qID]; ok {
 		if strings.Contains(v.Info.Sender.User, session.SenderID) {
@@ -409,9 +535,6 @@ func HandleMenuReplies(client *whatsmeow.Client, v *events.Message, bodyClean st
 	return false
 }
 
-// ==========================================
-// 🚀 DIRECT COMMAND LOGIC (.play, .yt, .tt)
-// ==========================================
 func handlePlayMusic(client *whatsmeow.Client, v *events.Message, query string) {
 	if query == "" { return }
 	react(client, v.Info.Chat, v.Info.ID, "🔍")
@@ -438,37 +561,69 @@ func handleTikTok(client *whatsmeow.Client, v *events.Message, args string) {
 	go downloadViaAPI(client, v, urlStr, mode, isAudio)
 }
 
-// ==========================================
-// 🎬 COMMAND: .video (Direct Video Search & 360p Download)
-// ==========================================
 func handleVideoSearch(client *whatsmeow.Client, v *events.Message, query string) {
-	if query == "" { 
-		return 
-	}
-	
-	// 🔍 Reaction: Searching
+	if query == "" { return }
 	react(client, v.Info.Chat, v.Info.ID, "🔍")
 
-	// Fast search using yt-dlp to get ID only (Sirf 1 result layega)
 	cmd := exec.Command("yt-dlp", "ytsearch1:"+query, "--flat-playlist", "--print", "%(id)s")
 	out, err := cmd.Output()
-	
-	// اگر کوئی ایرر آئے یا رزلٹ خالی ہو
-	if err != nil || len(out) == 0 {
-		react(client, v.Info.Chat, v.Info.ID, "❌")
-		return
-	}
+	if err != nil || len(out) == 0 { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 
 	vidID := strings.TrimSpace(string(out))
-	if vidID == "" {
-		react(client, v.Info.Chat, v.Info.ID, "❌")
-		return
-	}
+	if vidID == "" { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 
-	// یوٹیوب کا مکمل لنک بنائیں
 	ytUrl := "https://www.youtube.com/watch?v=" + vidID
-	
-	// ڈائریکٹ API کو ہٹ کریں: resolution = "360p", isAudio = false
 	go downloadViaAPI(client, v, ytUrl, "360p", false)
 }
 
+// 💎 پریمیم کارڈ میکر (ہیلپر)
+func sendPremiumCard(client *whatsmeow.Client, v *events.Message, title, site, info string) {
+	card := fmt.Sprintf(`╔══════════════════════╗
+║ ✨ %s DOWNLOADER
+╠══════════════════════╣
+║ 📝 Title: %s
+║ 🌐 Site: %s
+╠══════════════════════╣
+║ ⏳ Status: Processing...
+╚══════════════════════╝
+%s`, strings.ToUpper(site), title, site, info)
+	replyMessage(client, v, card)
+}
+
+func handleUniversalDownload(client *whatsmeow.Client, v *events.Message, url string, cmd string) {
+	if url == "" {
+		replyMessage(client, v, "❌ *Error:* Please provide a valid link.")
+		return
+	}
+
+	var platformName, emoji, actionText, mode string
+	mode = "video" 
+
+	switch cmd {
+	case "fb", "facebook":
+		platformName, emoji, actionText = "Facebook", "💙", "🎥 Extracting High Quality Content..."
+	case "ig", "insta", "instagram":
+		platformName, emoji, actionText = "Instagram", "📸", "📸 Capturing Media..."
+	case "tw", "x", "twitter":
+		platformName, emoji, actionText = "Twitter/X", "🐦", "🐦 Speeding through X servers..."
+	case "pin", "pinterest":
+		platformName, emoji, actionText = "Pinterest", "📌", "📌 Extracting Media Asset..."
+	case "snap", "snapchat":
+		platformName, emoji, actionText = "Snapchat", "👻", "👻 Capturing Snap Spotlight..."
+	case "reddit":
+		platformName, emoji, actionText = "Reddit", "👽", "👽 Merging Audio & Video..."
+	case "dm", "dailymotion":
+		platformName, emoji, actionText = "DailyMotion", "📺", "📺 Packing Video Stream..."
+	case "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp":
+		platformName = strings.ToUpper(cmd[:1]) + strings.ToLower(cmd[1:])
+		emoji, actionText = "🎵", "🎧 Ripping HQ Audio..."
+		mode = "audio"
+	default:
+		platformName = strings.ToUpper(cmd[:1]) + strings.ToLower(cmd[1:])
+		emoji, actionText = "🚀", "🚀 Fetching Media..."
+	}
+
+	react(client, v.Info.Chat, v.Info.ID, emoji)
+	sendPremiumCard(client, v, platformName+" Media", platformName, actionText)
+	go downloadAndSend(client, v, url, mode)
+}
