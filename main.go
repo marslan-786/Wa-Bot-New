@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context" // 🛠️ FIX: یہ امپورٹ اب لازمی ہو گیا ہے
 	"fmt"
 	"log"
 	"net/http"
@@ -16,27 +17,23 @@ import (
 // ==========================================
 // 🌐 GLOBAL VARIABLES
 // ==========================================
-// یہ میپ تمام ایکٹو بوٹس (ملٹی ڈیوائس) کا ریکارڈ رکھے گا
 var activeClients = make(map[string]*whatsmeow.Client)
 var clientsMutex sync.RWMutex
-
-// ڈیٹا بیس کا کنٹینر
 var dbContainer *sqlstore.Container
 
 // ==========================================
-// 📂 1. DATABASE INITIALIZATION (Railway Volume)
+// 📂 1. DATABASE INITIALIZATION
 // ==========================================
 func initDB() {
 	dbLog := waLog.Stdout("Database", "WARN", true)
 
-	// data فولڈر بنائیں (Railway Volume یہاں ماؤنٹ ہوگا)
 	err := os.MkdirAll("./data", 0755)
 	if err != nil {
 		log.Fatal("❌ Data directory create error:", err)
 	}
 
-	// SQLite ڈیٹا بیس کنیکٹ کریں
-	dbContainer, err = sqlstore.New("sqlite3", "file:./data/sessions.db?_foreign_keys=on", dbLog)
+	// 🛠️ FIX: context.Background() ایڈ کر دیا
+	dbContainer, err = sqlstore.New(context.Background(), "sqlite3", "file:./data/sessions.db?_foreign_keys=on", dbLog)
 	if err != nil {
 		log.Fatal("❌ Database connection error:", err)
 	}
@@ -47,9 +44,9 @@ func initDB() {
 // ==========================================
 // 🔄 2. AUTO-CONNECT ALL SESSIONS
 // ==========================================
-// یہ فنکشن سرور ری سٹارٹ ہونے پر تمام پرانے سیشنز کو خودکار طریقے سے لائیو کرے گا
 func RunAllSessions() {
-	devices, err := dbContainer.GetAllDevices()
+	// 🛠️ FIX: context.Background() ایڈ کر دیا
+	devices, err := dbContainer.GetAllDevices(context.Background())
 	if err != nil {
 		log.Println("❌ Error fetching devices:", err)
 		return
@@ -59,7 +56,6 @@ func RunAllSessions() {
 		clientLog := waLog.Stdout("Client", "WARN", true)
 		client := whatsmeow.NewClient(device, clientLog)
 
-		// 🔗 کمانڈز والی فائل (commands.go) کا ہینڈلر یہاں اٹیچ کریں
 		client.AddEventHandler(func(evt interface{}) {
 			EventHandler(client, evt)
 		})
@@ -70,7 +66,6 @@ func RunAllSessions() {
 			continue
 		}
 
-		// بوٹ کو میپ میں محفوظ کریں
 		clientsMutex.Lock()
 		activeClients[device.ID.User] = client
 		clientsMutex.Unlock()
@@ -80,7 +75,7 @@ func RunAllSessions() {
 }
 
 // ==========================================
-// 📱 3. PAIRING NEW SESSION (Web Interface)
+// 📱 3. PAIRING NEW SESSION
 // ==========================================
 func ConnectNewSession(w http.ResponseWriter, r *http.Request) {
 	phone := r.URL.Query().Get("phone")
@@ -93,7 +88,6 @@ func ConnectNewSession(w http.ResponseWriter, r *http.Request) {
 	clientLog := waLog.Stdout("Client", "INFO", true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
-	// 🔗 نیو بوٹ کے ساتھ بھی ہینڈلر اٹیچ کریں تاکہ وہ فوراً کام شروع کر دے
 	client.AddEventHandler(func(evt interface{}) {
 		EventHandler(client, evt)
 	})
@@ -104,14 +98,13 @@ func ConnectNewSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// پیئرنگ کوڈ جنریٹ کریں
-	code, err := client.PairPhone(phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+	// 🛠️ FIX: context.Background() ایڈ کر دیا
+	code, err := client.PairPhone(context.Background(), phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
 	if err != nil {
 		http.Error(w, "Failed to get pairing code", http.StatusInternalServerError)
 		return
 	}
 
-	// کوڈ کو HTML فرنٹ اینڈ پر بھیجیں
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "%s", code)
 
@@ -124,19 +117,14 @@ func ConnectNewSession(w http.ResponseWriter, r *http.Request) {
 func main() {
 	log.Println("🚀 Starting Silent Nexus Engine...")
 
-	// 1. ڈیٹا بیس سیٹ اپ کریں
 	initDB()
-
-	// 2. تمام محفوظ شدہ بوٹس کو لائیو کریں
 	RunAllSessions()
 
-	// 3. ویب سرور کے روٹس (Routes)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "index.html") // یہ آپ کا VIP ڈیزائن والا پیج ہے
+		http.ServeFile(w, r, "index.html")
 	})
 	http.HandleFunc("/pair", ConnectNewSession)
 
-	// 4. پورٹ سیٹ کریں (Railway خودکار طور پر PORT دیتا ہے)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

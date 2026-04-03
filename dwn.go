@@ -58,8 +58,10 @@ type APIResponse struct {
 
 
 // واٹس ایپ کی سیف لمٹ: 1.8 GB (بائٹس میں)
-const MaxWhatsAppSize = int64(1.8 * 1024 * 1024 * 1024) 
+// واٹس ایپ کی سیف لمٹ: 1.8 GB (بائٹس میں)
+const MaxWhatsAppSize int64 = 1932735283 // 1.8 GB in bytes
 const SafeMarginMB = 1800.0
+
 
 // ==========================================
 // 🌐 MASTER API DOWNLOADER (With Disk Streaming & Splitting)
