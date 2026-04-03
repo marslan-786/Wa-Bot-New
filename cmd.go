@@ -269,6 +269,9 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		react(client, v.Info.Chat, v.Info.ID, "👀")
 		go handleVV(client, v)
 		
+	case "id":
+		react(client, v.Info.Chat, v.Info.ID, "🪪")
+		go handleID(client, v)
     
 	case "fb", "facebook", "ig", "insta", "instagram", "tw", "x", "twitter", "pin", "pinterest", "threads", "snap", "snapchat", "reddit", "dm", "dailymotion", "vimeo", "rumble", "bilibili", "douyin", "kwai", "bitchute", "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp", "imgur", "giphy", "flickr", "9gag", "ifunny":
 	    react(client, v.Info.Chat, v.Info.ID, "🪩")
@@ -424,11 +427,13 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
  │ 
  │ ➭ *%[3]svv* [reply to media]
  │    _Anti View-Once Media Extract_
+ │
+ │ ➭ *%[3]sid* [Get Your ID]
  │ 
  ╰──────────────────────╯
  
 
-     ⚡ ━━━ ✦ 💖 𝙎𝙞𝙡𝙚𝙣𝙩 𝙃𝙖𝙘𝙠𝙚𝙧𝙨 💖 ✦ ━━━ ⚡`, 
+  ⚡━ ✦ 💖 𝙎𝙞𝙡𝙚𝙣𝙩 𝙃𝙖𝙘𝙠𝙚𝙧𝙨 💖 ✦ ━ ⚡`, 
 	strings.ToUpper(settings.Mode), uptimeStr, settings.Prefix)
 
 	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
@@ -550,4 +555,41 @@ func handlePair(client *whatsmeow.Client, v *events.Message, args string) {
 	replyMessage(client, v, formattedCode)
 	
 	react(client, v.Info.Chat, v.Info.ID, "✅")
+}
+
+// ==========================================
+// 🪪 COMMAND: .id (Get JID Info)
+// ==========================================
+func handleID(client *whatsmeow.Client, v *events.Message) {
+	// 1. چیٹ اور سینڈر کی آئی ڈی نکالیں
+	chatJID := v.Info.Chat.String()
+	senderJID := v.Info.Sender.ToNonAD().String()
+
+	// 2. چیک کریں کہ گروپ ہے یا پرائیویٹ چیٹ
+	chatType := "👤 𝗣𝗿𝗶𝘃𝗮𝘁𝗲 𝗖𝗵𝗮𝘁"
+	if strings.Contains(chatJID, "@g.us") {
+		chatType = "👥 𝗚𝗿𝗼𝘂𝗽 𝗖𝗵𝗮𝘁"
+	}
+
+	// 3. وی آئی پی کارڈ ڈیزائن بنانا شروع کریں
+	card := fmt.Sprintf(`❖ ── ✦ 🪪 𝗜𝗗 𝗖𝗔𝗥𝗗 ✦ ── ❖
+
+ %s
+ ➭ *%s*
+
+ 👤 𝗦𝗲𝗻𝗱𝗲𝗿
+ ➭ *%s*`, chatType, chatJID, senderJID)
+
+	// 4. اگر کسی میسج کا ریپلائی کیا ہے، تو اس کا ڈیٹا بھی نکالیں
+	extMsg := v.Message.GetExtendedTextMessage()
+	if extMsg != nil && extMsg.ContextInfo != nil && extMsg.ContextInfo.Participant != nil {
+		quotedJID := *extMsg.ContextInfo.Participant
+		card += fmt.Sprintf("\n\n 🎯 𝗧𝗮𝗿𝗴𝗲𝘁 (𝗤𝘂𝗼𝘁𝗲𝗱)\n ➭ *%s*", quotedJID)
+	}
+
+	// کارڈ کا اینڈ
+	card += "\n\n ╰──────────────────────╯"
+
+	// 5. میسج سینڈ کریں
+	replyMessage(client, v, card)
 }
