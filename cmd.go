@@ -106,8 +106,7 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 
 	case "menu", "help":
 		react(client, v.Info.Chat, v.Info.ID, "📂")
-		go sendMainMenu(client, v, settings) // settings پاس کر رہے ہیں
-	}
+		go sendMainMenu(client, v, settings)
 
 	case "play", "song":
 		react(client, v.Info.Chat, v.Info.ID, "🎵")
