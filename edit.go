@@ -8,6 +8,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strings"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -260,14 +262,61 @@ func handleToUrl(client *whatsmeow.Client, v *events.Message) {
 // ==========================================
 // 🎙️ COMMAND: .toptt (Google TTS)
 // ==========================================
-func handleToPTT(client *whatsmeow.Client, v *events.Message, text string) {
-	if text == "" {
-		replyMessage(client, v, "❌ Please provide text.\nExample: `.toptt Hello Arslan bhai kaise ho`")
+// ==========================================
+// 🎙️ COMMAND: .toptt (Smart Multilingual & Auto-Script Fix)
+// ==========================================
+func handleToPTT(client *whatsmeow.Client, v *events.Message, args string) {
+	if args == "" {
+		replyMessage(client, v, "❌ Please provide text.\n*Example:* `.toptt kiya hal ha`\n*With Language:* `.toptt en Hello bro`")
 		return
 	}
 	react(client, v.Info.Chat, v.Info.ID, "🎙️")
 
-	ttsURL := fmt.Sprintf("https://translate.google.com/translate_tts?ie=UTF-8&tl=ur&client=tw-ob&q=%s", url.QueryEscape(text))
+	// 1. زبان چیک کریں
+	parts := strings.Fields(args)
+	targetLang := "ur" // بائی ڈیفالٹ اردو
+	textToSpeak := args
+
+	langMap := map[string]string{
+		"ur": "ur", "urdu": "ur",
+		"hi": "hi", "hindi": "hi",
+		"en": "en", "english": "en",
+		"ar": "ar", "arabic": "ar",
+		"pa": "pa", "punjabi": "pa",
+	}
+
+	if len(parts) > 1 {
+		if val, ok := langMap[strings.ToLower(parts[0])]; ok {
+			targetLang = val
+			textToSpeak = strings.Join(parts[1:], " ")
+		}
+	}
+
+	// 🔥 VIP JUGAAD: اگر انگلش نہیں ہے (مثلاً اردو/ہندی ہے) تو رومن کو اصلی فونٹ میں بدل دو
+	if targetLang != "en" {
+		transURL := fmt.Sprintf("https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=%s&dt=t&q=%s", targetLang, url.QueryEscape(textToSpeak))
+		if trResp, err := http.Get(transURL); err == nil {
+			defer trResp.Body.Close()
+			var result []interface{}
+			if json.NewDecoder(trResp.Body).Decode(&result) == nil && len(result) > 0 {
+				if innerArray, ok := result[0].([]interface{}); ok {
+					translatedText := ""
+					for _, item := range innerArray {
+						if strArray, ok2 := item.([]interface{}); ok2 && len(strArray) > 0 {
+							translatedText += fmt.Sprintf("%v", strArray[0])
+						}
+					}
+					if translatedText != "" {
+						textToSpeak = translatedText // یہ "kiya hal ha" کو "کیا حال ہے" کر دے گا!
+					}
+				}
+			}
+		}
+	}
+
+	// 2. اصلی اوریجنل فونٹ کے ساتھ وائس جنریٹ کریں
+	ttsURL := fmt.Sprintf("https://translate.google.com/translate_tts?ie=UTF-8&tl=%s&client=tw-ob&q=%s", targetLang, url.QueryEscape(textToSpeak))
+	
 	resp, err := http.Get(ttsURL)
 	if err != nil || resp.StatusCode != 200 {
 		replyMessage(client, v, "❌ Failed to generate audio. Text might be too long.")
@@ -283,10 +332,12 @@ func handleToPTT(client *whatsmeow.Client, v *events.Message, text string) {
 	defer os.Remove(tempIn)
 	defer os.Remove(tempOut)
 
-	exec.Command("ffmpeg", "-i", tempIn, "-c:a", "libopus", "-b:a", "32k", "-vbr", "on", "-compression_level", "10", "-frame_duration", "20", "-application", "voip", tempOut).Run()
+	// 3. FFmpeg کنورژن (WhatsApp PTT)
+	exec.Command("ffmpeg", "-y", "-i", tempIn, "-c:a", "libopus", "-b:a", "32k", "-vbr", "on", "-compression_level", "10", "-frame_duration", "20", "-application", "voip", tempOut).Run()
 
 	oggData, err := os.ReadFile(tempOut)
 	if err != nil || len(oggData) == 0 { return }
+	
 	up, _ := client.Upload(context.Background(), oggData, whatsmeow.MediaAudio)
 
 	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
@@ -300,6 +351,7 @@ func handleToPTT(client *whatsmeow.Client, v *events.Message, text string) {
 	})
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
+
 
 // ==========================================
 // 🔠 COMMAND: .fancy (50+ Multi-Font Generator)
