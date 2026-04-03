@@ -422,13 +422,27 @@ func splitVideoSmart(inputPath string, targetMB float64) ([]string, error) {
 // ==========================================
 // 🎯 5. COMMAND HANDLERS & MENUS
 // ==========================================
+// ==========================================
+// 📺 YOUTUBE SEARCH MENU (.yts)
+// ==========================================
 func handleYTS(client *whatsmeow.Client, v *events.Message, query string) {
 	if query == "" { return }
 	react(client, v.Info.Chat, v.Info.ID, "🔍")
 
+	// CombinedOutput یوز کر رہے ہیں تاکہ ایرر بھی پکڑ سکیں
 	cmd := exec.Command("yt-dlp", "ytsearch5:"+query, "--flat-playlist", "--print", "%(title)s|||%(id)s")
-	out, err := cmd.Output()
-	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	out, err := cmd.CombinedOutput()
+	
+	if err != nil { 
+		// اگر سرچ فیل ہو تو ایرر منہ پر مارو
+		errMsg := strings.TrimSpace(string(out))
+		if len(errMsg) > 500 { errMsg = errMsg[:500] + "..." } // زیادہ لمبا ایرر ہو تو کاٹ دو
+		
+		fmt.Printf("❌ [YTS ERROR]: %v\nOutput: %s\n", err, errMsg)
+		replyMessage(client, v, fmt.Sprintf("❌ *YouTube Search Error:*\n```\n%s\n```", errMsg))
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return 
+	}
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	var results []SearchResult
@@ -448,12 +462,81 @@ func handleYTS(client *whatsmeow.Client, v *events.Message, query string) {
 		count++
 	}
 
-	if count == 0 { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	if count == 0 { 
+		replyMessage(client, v, "❌ *Error:* No videos found for this search.")
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return 
+	}
 	menuText += "↬ _Reply with a number (1-5)_"
 
 	msgID := replyMessage(client, v, menuText)
 	ytSearchCache[msgID] = MediaSession{Results: results, SenderID: v.Info.Sender.User}
 }
+
+// ==========================================
+// 🎬 COMMAND: .video (Direct Video Search & Download)
+// ==========================================
+func handleVideoSearch(client *whatsmeow.Client, v *events.Message, query string) {
+	if query == "" { return }
+	react(client, v.Info.Chat, v.Info.ID, "🔍")
+
+	// پرانے بوٹ والی پرفیکٹ لاجک (--get-id)
+	cmd := exec.Command("yt-dlp", "ytsearch1:"+query, "--get-id")
+	out, err := cmd.CombinedOutput()
+	
+	if err != nil {
+		errMsg := strings.TrimSpace(string(out))
+		if len(errMsg) > 500 { errMsg = errMsg[:500] + "..." }
+		
+		fmt.Printf("❌ [VIDEO SEARCH ERROR]: %v\nOutput: %s\n", err, errMsg)
+		replyMessage(client, v, fmt.Sprintf("❌ *Search Error:*\n```\n%s\n```", errMsg))
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return
+	}
+
+	vidID := strings.TrimSpace(string(out))
+	if vidID == "" {
+		replyMessage(client, v, "❌ *Error:* No video found for this search.")
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return
+	}
+
+	ytUrl := "https://www.youtube.com/watch?v=" + vidID
+	go downloadViaAPI(client, v, ytUrl, "360p", false)
+}
+
+// ==========================================
+// 🎵 COMMAND: .play (Direct Audio Search & Download)
+// ==========================================
+func handlePlayMusic(client *whatsmeow.Client, v *events.Message, query string) {
+	if query == "" { return }
+	react(client, v.Info.Chat, v.Info.ID, "🔍")
+
+	// پرانے بوٹ والی پرفیکٹ لاجک (--get-id)
+	cmd := exec.Command("yt-dlp", "ytsearch1:"+query, "--get-id")
+	out, err := cmd.CombinedOutput()
+	
+	if err != nil {
+		errMsg := strings.TrimSpace(string(out))
+		if len(errMsg) > 500 { errMsg = errMsg[:500] + "..." }
+		
+		fmt.Printf("❌ [PLAY SEARCH ERROR]: %v\nOutput: %s\n", err, errMsg)
+		replyMessage(client, v, fmt.Sprintf("❌ *Search Error:*\n```\n%s\n```", errMsg))
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return
+	}
+
+	vidID := strings.TrimSpace(string(out))
+	if vidID == "" {
+		replyMessage(client, v, "❌ *Error:* No audio found for this search.")
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return
+	}
+
+	ytUrl := "https://www.youtube.com/watch?v=" + vidID
+	go downloadViaAPI(client, v, ytUrl, "mp3", true)
+}
+
 
 func handleYTQualityMenu(client *whatsmeow.Client, v *events.Message, ytUrl string) {
 	menu := `❖ ── ✦ 𝗤𝗨𝗔𝗟𝗜𝗧𝗬 ✦ ── ❖
@@ -470,33 +553,61 @@ func handleYTQualityMenu(client *whatsmeow.Client, v *events.Message, ytUrl stri
 	ytQualityCache[msgID] = YTDownloadState{Url: ytUrl, SenderID: v.Info.Sender.User}
 }
 
+// ==========================================
+// 🎵 TIKTOK SEARCH MENU (Fixed JSON Parsing + New UI)
+// ==========================================
 func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	if query == "" { return }
 	react(client, v.Info.Chat, v.Info.ID, "🔍")
 
+	// Python Script چلائیں
 	cmd := exec.Command("python3", "tiktok_search.py", query)
-	out, err := cmd.Output()
-	if err != nil { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-
-	var results []SearchResult
-	if err := json.Unmarshal(out, &results); err != nil || len(results) == 0 {
-		react(client, v.Info.Chat, v.Info.ID, "❌"); return
+	
+	// CombinedOutput یوز کریں تاکہ اگر کوئی ایرر آئے تو ہم لاگز دیکھ سکیں
+	out, err := cmd.CombinedOutput()
+	if err != nil { 
+		fmt.Printf("❌ [GO] Execution Error: %v\n", err)
+		react(client, v.Info.Chat, v.Info.ID, "❌") 
+		return 
 	}
 
+	// 🔥 CRITICAL FIX: صرف آخری لائن نکالیں (جیسا پرانے بوٹ میں تھا)
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	lastLine := lines[len(lines)-1]
+
+	var results []SearchResult
+	
+	// پہلے آخری لائن کو Parse کرنے کی کوشش کریں
+	if jsonErr := json.Unmarshal([]byte(lastLine), &results); jsonErr != nil || len(results) == 0 {
+		// اگر آخری لائن کام نہ کرے تو پورے آؤٹ پٹ کو ٹرائی کریں (Fallback)
+		if err2 := json.Unmarshal(out, &results); err2 != nil || len(results) == 0 {
+			fmt.Printf("❌ [GO] JSON Parse Error: %v\nRaw Output: %s\n", jsonErr, string(out))
+			react(client, v.Info.Chat, v.Info.ID, "❌")
+			return
+		}
+	}
+
+	// NEW ELEGANT DESIGN
 	menuText := "❖ ── ✦ 𝗧𝗜𝗞𝗧𝗢𝗞 𝗦𝗘𝗔𝗥𝗖𝗛 ✦ ── ❖\n\n"
 	icons := []string{"❶", "❷", "❸", "❹", "❺", "❻", "❼", "❽", "❾", "❿"}
 	
 	limit := len(results)
-	if limit > 5 { limit = 5 } 
+	if limit > 5 { limit = 5 } // مینیو کو کلین رکھنے کے لیے 5 رزلٹس
 
 	for i := 0; i < limit; i++ {
 		menuText += fmt.Sprintf(" %s %s\n\n", icons[i], results[i].Title)
 	}
 	menuText += "↬ _Reply with a number_"
 
+	// مینیو سینڈ کریں
 	msgID := replyMessage(client, v, menuText)
-	ttSearchCache[msgID] = MediaSession{Results: results[:limit], SenderID: v.Info.Sender.User}
+
+	// Cache میں سیو کریں (MediaSession یوز کر رہے ہیں تاکہ HandleMenuReplies کام کرے)
+	if msgID != "" {
+		ttSearchCache[msgID] = MediaSession{Results: results[:limit], SenderID: v.Info.Sender.User}
+	}
 }
+
 
 func HandleMenuReplies(client *whatsmeow.Client, v *events.Message, bodyClean string, qID string) bool {
     if HandleAIChatReply(client, v, bodyClean, qID) {
@@ -536,15 +647,6 @@ func HandleMenuReplies(client *whatsmeow.Client, v *events.Message, bodyClean st
 	return false
 }
 
-func handlePlayMusic(client *whatsmeow.Client, v *events.Message, query string) {
-	if query == "" { return }
-	react(client, v.Info.Chat, v.Info.ID, "🔍")
-	cmd := exec.Command("yt-dlp", "ytsearch1:"+query, "--flat-playlist", "--print", "%(id)s")
-	out, err := cmd.Output()
-	if err != nil || string(out) == "" { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-	go downloadViaAPI(client, v, "https://www.youtube.com/watch?v="+strings.TrimSpace(string(out)), "mp3", true)
-}
-
 func handleYTDirect(client *whatsmeow.Client, v *events.Message, ytUrl string) {
 	if ytUrl == "" { return }
 	go downloadViaAPI(client, v, ytUrl, "360p", false)
@@ -560,21 +662,6 @@ func handleTikTok(client *whatsmeow.Client, v *events.Message, args string) {
 		mode, isAudio, urlStr = "mp3", true, parts[1]
 	}
 	go downloadViaAPI(client, v, urlStr, mode, isAudio)
-}
-
-func handleVideoSearch(client *whatsmeow.Client, v *events.Message, query string) {
-	if query == "" { return }
-	react(client, v.Info.Chat, v.Info.ID, "🔍")
-
-	cmd := exec.Command("yt-dlp", "ytsearch1:"+query, "--flat-playlist", "--print", "%(id)s")
-	out, err := cmd.Output()
-	if err != nil || len(out) == 0 { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-
-	vidID := strings.TrimSpace(string(out))
-	if vidID == "" { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-
-	ytUrl := "https://www.youtube.com/watch?v=" + vidID
-	go downloadViaAPI(client, v, ytUrl, "360p", false)
 }
 
 // 💎 پریمیم کارڈ میکر (ہیلپر)
