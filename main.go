@@ -29,7 +29,7 @@ var dbContainer *sqlstore.Container
 // ==========================================
 func initDB() {
 	// 🛠️ FIX: "WARN" کو "ERROR" کر دیا ہے تاکہ کنسول صاف رہے
-	dbLog := waLog.Stdout("Database", "ERROR", true)
+	dbLog := waLog.Noop
 
 	err := os.MkdirAll("./data", 0755)
 	if err != nil {
@@ -90,7 +90,7 @@ func ConnectNewSession(w http.ResponseWriter, r *http.Request) {
 	deviceStore := dbContainer.NewDevice()
 	
 	// 🛠️ FIX: "INFO" کو "ERROR" کر دیا تاکہ فالتو لاگز نہ آئیں
-	clientLog := waLog.Stdout("Client", "ERROR", true)
+	clientLog := waLog.Noop
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
 	client.AddEventHandler(func(evt interface{}) {
@@ -123,6 +123,7 @@ func main() {
 	log.Println("🚀 Starting Silent Nexus Engine...")
 
 	initDB()
+	initSettingsDB()
 	RunAllSessions()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

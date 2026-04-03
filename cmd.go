@@ -32,11 +32,11 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 // ==========================================
 // 🚀 ASYNC COMMAND PROCESSOR
 // ==========================================
+// cmd.go میں processMessageAsync کے اندر تبدیلیاں:
 func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
-	// 🛡️ BULLETPROOF RECOVERY: یہ بوٹ کو کبھی کریش نہیں ہونے دے گا
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("⚠️ [CRASH PREVENTED] Error in command by %s: %v\n", v.Info.Sender.User, r)
+			fmt.Printf("⚠️ [CRASH PREVENTED]: %v\n", r)
 			react(client, v.Info.Chat, v.Info.ID, "❌")
 		}
 	}()
@@ -47,44 +47,67 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	} else if v.Message.ExtendedTextMessage != nil && v.Message.ExtendedTextMessage.Text != nil {
 		body = *v.Message.ExtendedTextMessage.Text
 	}
-
 	bodyClean := strings.TrimSpace(body)
-	if bodyClean == "" {
-		return
-	}
+	if bodyClean == "" { return }
 
-	// مینو ریپلائی چیک
-	extMsg := v.Message.GetExtendedTextMessage()
-	if extMsg != nil && extMsg.ContextInfo != nil && extMsg.ContextInfo.StanzaID != nil {
-		qID := *extMsg.ContextInfo.StanzaID
-		// HandleMenuReplies 'downloader.go' فائل میں موجود ہے
-		if HandleMenuReplies(client, v, bodyClean, qID) {
-			return 
+	// 🔥 1. اس سیشن کی سیٹنگز لائیں
+	settings := getBotSettings(client.Store.ID.User)
+
+	// 🔥 2. موڈ کے حساب سے فلٹر کریں
+	isGroup := strings.Contains(v.Info.Chat.String(), "@g.us")
+	isOwner := v.Info.IsFromMe // جو نمبر بوٹ چلا رہا ہے وہ خود اونر ہے
+
+	if !isOwner { // اونر پر موڈ کی پابندی نہیں ہوتی
+		if settings.Mode == "private" && isGroup {
+			return // گروپس میں بلاک
+		}
+		if settings.Mode == "admin" && isGroup {
+			groupInfo, err := client.GetGroupInfo(v.Info.Chat)
+			if err != nil { return }
+			isAdmin := false
+			for _, participant := range groupInfo.Participants {
+				if participant.JID.User == v.Info.Sender.User && (participant.IsAdmin || participant.IsSuperAdmin) {
+					isAdmin = true
+					break
+				}
+			}
+			if !isAdmin { return } // اگر ایڈمن نہیں تو اگنور کرو
 		}
 	}
 
-	prefix := "."
-	if !strings.HasPrefix(bodyClean, prefix) {
+	// مینو ریپلائی چیک (آپ کا پرانا کوڈ)
+	extMsg := v.Message.GetExtendedTextMessage()
+	if extMsg != nil && extMsg.ContextInfo != nil && extMsg.ContextInfo.StanzaID != nil {
+		qID := *extMsg.ContextInfo.StanzaID
+		if HandleMenuReplies(client, v, bodyClean, qID) { return }
+	}
+
+	// 🔥 3. ڈائنامک پریفکس چیک کریں
+	if !strings.HasPrefix(bodyClean, settings.Prefix) {
 		return
 	}
 
-	msgWithoutPrefix := strings.TrimPrefix(bodyClean, prefix)
+	msgWithoutPrefix := strings.TrimPrefix(bodyClean, settings.Prefix)
 	words := strings.Fields(msgWithoutPrefix)
-	if len(words) == 0 {
-		return
-	}
+	if len(words) == 0 { return }
 
 	cmd := strings.ToLower(words[0])
 	fullArgs := strings.TrimSpace(strings.Join(words[1:], " "))
 
-	// ==========================================
-	// 🎯 COMMAND SWITCH (Clean & Separated)
-	// ==========================================
 	switch cmd {
+    
+	case "setprefix":
+		if !isOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleSetPrefix(client, v, fullArgs)
+
+	case "mode":
+		if !isOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleMode(client, v, fullArgs)
 
 	case "menu", "help":
 		react(client, v.Info.Chat, v.Info.ID, "📂")
-		sendMainMenu(client, v)
+		go sendMainMenu(client, v, settings) // settings پاس کر رہے ہیں
+	}
 
 	case "play", "song":
 		react(client, v.Info.Chat, v.Info.ID, "🎵")
@@ -124,130 +147,150 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 // ==========================================
 // ✨ VIP MENU DESIGN
 // ==========================================
-func sendMainMenu(client *whatsmeow.Client, v *events.Message) {
-	menu := `❖ ── ✦ 𝗦𝗜𝗟𝗘𝗡𝗧 𝙃𝙖𝙘𝙠𝙚𝙧𝙨 ✦ ── ❖
+// ✨ VIP MENU DESIGN (Image + Status Broadcast + Stylish Footer)
+func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSettings) {
+	// اپ ٹائم حاصل کریں
+	uptimeStr := getUptimeString(settings.UptimeStart)
+
+	menu := fmt.Sprintf(`❖ ── ✦ 𝗦𝗜𝗟𝗘𝗡𝗧 𝙃𝙖𝙘𝙠𝙚𝙧𝙨 ✦ ── ❖
  
  👤 𝗢𝘄𝗻𝗲𝗿: 𝗦𝗜𝗟𝗘𝗡𝗧 𝙃𝙖𝙘𝙠𝙚𝙧𝙨
- ⚙️ 𝗠𝗼𝗱𝗲: Public
+ ⚙️ 𝗠𝗼𝗱𝗲: %s
+ ⏱️ 𝗨𝗽𝘁𝗶𝗺𝗲: %s
+ ⚡ 𝗣𝗿𝗲𝗳𝗶𝘅: [ %s ]
 
  ╭── ✦ [ 𝗬𝗢𝗨𝗧𝗨𝗕𝗘 𝗠𝗘𝗡𝗨 ] ✦ ──╮
  │ 
- │ ➭ *.play / .song* [name]
+ │ ➭ *%splay / %ssong* [name]
  │    _Direct HQ Audio Download_
  │
- │ ➭ *.video* [name]
+ │ ➭ *%svideo* [name]
  │    _Direct HD Video Download_
  │
- │ ➭ *.yt* [youtube link]
+ │ ➭ *%syt* [link]
  │    _Download YT Video/Audio_
  │
- │ ➭ *.yts* [search query]
+ │ ➭ *%syts* [query]
  │    _Search YouTube Videos_
  │
  ╰──────────────────────╯
 
  ╭── ✦ [ 𝗧𝗜𝗞𝗧𝗢𝗞 𝗠𝗘𝗡𝗨 ] ✦ ──╮
  │ 
- │ ➭ *.tt* [tiktok link]
+ │ ➭ *%stt* [link]
  │    _No-Watermark TT Video_
  │
- │ ➭ *.tt audio* [tiktok link]
+ │ ➭ *%stt audio* [link]
  │    _Extract TikTok Sound_
  │
- │ ➭ *.tts* [search query]
+ │ ➭ *%stts* [query]
  │    _Search TikTok Trends_
  │
  ╰──────────────────────╯
 
  ╭── ✦ [ 𝗨𝗡𝗜𝗩𝗘𝗥𝗦𝗔𝗟 𝗠𝗘𝗗𝗜𝗔 ] ✦ ──╮
  │ 
- │ ➭ *.fb / .facebook* [link]
+ │ ➭ *%sfb / %sfacebook* [link]
  │    _FB High-Quality Videos_
  │
- │ ➭ *.ig / .insta* [link]
+ │ ➭ *%sig / %sinsta* [link]
  │    _Instagram Reels/IGTV_
  │
- │ ➭ *.tw / .x* [link]
+ │ ➭ *%stw / %sx* [link]
  │    _X/Twitter Media Extract_
  │
- │ ➭ *.snap / .snapchat* [link]
+ │ ➭ *%ssnap* [link]
  │    _Snapchat Spotlights_
  │
- │ ➭ *.threads* [link]
+ │ ➭ *%sthreads* [link]
  │    _Threads Video Download_
  │
- │ ➭ *.pin / .pinterest* [link]
+ │ ➭ *%spin* [link]
  │    _Pinterest Video/Images_
  │
- │ ➭ *.reddit* [link]
+ │ ➭ *%sreddit* [link]
  │    _Reddit Videos & GIFs_
- │
- │ ➭ *.imgur / .giphy* [link]
- │    _Download Gifs & Assets_
- │
- ╰──────────────────────╯
-
- ╭── ✦ [ 𝗔𝗨𝗗𝗜𝗢 & 𝗦𝗧𝗥𝗘𝗔𝗠𝗦 ] ✦ ──╮
- │ 
- │ ➭ *.sc / .soundcloud* [link]
- │    _SoundCloud Audio Rips_
- │
- │ ➭ *.spotify* [link]
- │    _Spotify HQ Tracks_
- │
- │ ➭ *.apple* [link]
- │    _Apple Music Audio_
- │
- │ ➭ *.dm / .dailymotion* [link]
- │    _DailyMotion Videos_
- │
- │ ➭ *.vimeo / .rumble* [link]
- │    _Vimeo & Rumble Streams_
  │
  ╰──────────────────────╯
 
  ╭── ✦ [ 🧠 𝗔𝗜 𝗠𝗔𝗦𝗧𝗘𝗥𝗠𝗜𝗡𝗗𝗦 ] ──╮
  │ 
- │ ➭ *.ai / .ask* [text]
+ │ ➭ *%sai / %sask* [text]
  │    _Faisalabadi Smart AI_
  │
- │ ➭ *.gpt / .chatgpt* [text]
+ │ ➭ *%sgpt / %schatgpt* [text]
  │    _ChatGPT 4o Persona_
  │
- │ ➭ *.gemini* [text]
+ │ ➭ *%sgemini* [text]
  │    _Google Gemini Pro_
  │
- │ ➭ *.claude* [text]
+ │ ➭ *%sclaude* [text]
  │    _Anthropic Claude 3_
  │
- │ ➭ *.llama / .groq* [text]
+ │ ➭ *%sllama / %sgroq* [text]
  │    _Meta Llama 3 Fast Engine_
- │
- │ ➭ *.bot* [text]
- │    _Quick & Funny Chatbot_
- │
- │ ➭ *[ Reply to AI's Message ]*
- │    _To continue the conversation_
  │
  ╰──────────────────────╯
 
  ╭── ✦ [ 𝗢𝗪𝗡𝗘𝗥 𝗠𝗘𝗡𝗨 ] ✦ ──╮
  │ 
- │ ➭ *.pair* [number]
+ │ ➭ *%ssetprefix* [symbol]
+ │    _Change Bot Prefix_
+ │
+ │ ➭ *%smode* [public/private/admin]
+ │    _Change Bot Work Mode_
+ │
+ │ ➭ *%spair* [number]
  │    _Connect New Bot Session_
- │
- │ ➭ *.anticall* [on/off]
- │    _Block & Delete Calls_
- │
- │ ➭ *.antidm* [on/off]
- │    _Block Unsaved Numbers_
  │
  ╰──────────────────────╯
 
- ⚡ _𝙎𝙞𝙡𝙚𝙣𝙩 𝙃𝙖𝙘𝙠𝙚𝙧𝙨_`
+     ⚡ ━━━ ✦ 💖 𝙎𝙞𝙡𝙚𝙣𝙩 𝙃𝙖𝙘𝙠𝙚𝙧𝙨 💖 ✦ ━━━ ⚡`, 
+	strings.ToUpper(settings.Mode), uptimeStr, settings.Prefix, 
+	settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, 
+	settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, 
+	settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, 
+	settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, 
+	settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, settings.Prefix, 
+	settings.Prefix, settings.Prefix, settings.Prefix)
 
-	replyMessage(client, v, menu)
+	// 🖼️ 1. تصویر لوڈ کریں
+	imageData, err := os.ReadFile("pic.png")
+	if err != nil {
+		fmt.Printf("⚠️ Image error: %v\n", err)
+		replyMessage(client, v, menu) // اگر تصویر نہ ملے تو صرف ٹیکسٹ بھیج دے
+		return
+	}
+
+	// 📤 2. تصویر واٹس ایپ پر اپلوڈ کریں
+	resp, err := client.Upload(context.Background(), imageData, whatsmeow.MediaImage)
+	if err != nil {
+		replyMessage(client, v, menu)
+		return
+	}
+
+	// 🛡️ 3. ویریفائیڈ اسٹیٹس اور تصویر کے ساتھ میسج بھیجیں
+	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
+		ImageMessage: &waProto.ImageMessage{
+			URL:           proto.String(resp.URL),
+			DirectPath:    proto.String(resp.DirectPath),
+			MediaKey:      resp.MediaKey,
+			Mimetype:      proto.String("image/png"),
+			FileEncSHA256: resp.FileEncSHA256,
+			FileSHA256:    resp.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(imageData))),
+			Caption:       proto.String(menu),
+			ContextInfo: &waProto.ContextInfo{
+				StanzaID:      proto.String(v.Info.ID),
+				Participant:   proto.String("0@s.whatsapp.net"), // 👈 ویریفائیڈ لک کے لیے
+				QuotedMessage: &waProto.Message{
+					Conversation: proto.String("𝗦𝗜𝗟𝗘𝗡𝗧 𝗛𝗮𝗰𝗸𝗲𝗿𝘀 𝗢𝗳𝗳𝗶𝗰𝗶𝗮𝗹 𝗕𝗼𝘁 ✅"),
+				},
+			},
+		},
+	})
 }
+
 
 
 func react(client *whatsmeow.Client, chat types.JID, msgID types.MessageID, emoji string) {
