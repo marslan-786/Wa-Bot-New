@@ -463,19 +463,46 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
  ╭── ✦ [ 🛡️ 𝗚𝗥𝗢𝗨𝗣 𝗠𝗘𝗡𝗨 🛡️ ] ──╮
  │ 
  │ ➭ *%[3]santilink* [on/off]
+ │    _Block Links in Group_
+ │
  │ ➭ *%[3]santipic* [on/off]
+ │    _Block Image Sharing_
+ │
  │ ➭ *%[3]santivideo* [on/off]
+ │    _Block Video Sharing_
+ │
  │ ➭ *%[3]santisticker* [on/off]
+ │    _Block Sticker Sharing_
+ │
  │ ➭ *%[3]swelcome* [on/off]
+ │    _Welcome New Members_
+ │
  │ ➭ *%[3]santidelete* [on/off]
+ │    _Anti Delete Messages_
+ │
  │ ➭ *%[3]skick* [@tag/reply]
+ │    _Remove Member_
+ │
  │ ➭ *%[3]sadd* [number]
+ │    _Add New Member_
+ │
  │ ➭ *%[3]spromote* [@tag/reply]
+ │    _Make Group Admin_
+ │
  │ ➭ *%[3]sdemote* [@tag/reply]
+ │    _Remove Admin Role_
+ │
  │ ➭ *%[3]stagall* [text]
+ │    _Mention All Members_
+ │
  │ ➭ *%[3]shidetag* [text]
+ │    _Silent Tag All Members_
+ │
  │ ➭ *%[3]sgroup* [open/close]
+ │    _Change Group Settings_
+ │
  │ ➭ *%[3]sdel* [reply]
+ │    _Delete For Everyone_
  │ 
  ╰──────────────────────╯
 
@@ -484,33 +511,61 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
  │ ➭ *%[3]svv* [reply to media]
  │    _Anti View-Once Media Extract_
  │
- │ ➭ *%[3]sid* [Get Your ID]
+ │ ➭ *%[3]sid*
+ │    _Get Your Chat ID_
  │ 
  ╰──────────────────────╯
  
  ╭── ✦ [ 🎨 𝗘𝗗𝗜𝗧𝗜𝗡𝗚 𝗭𝗢𝗡𝗘 🎨 ] ──╮
  │ 
- │ ➭ *%[3]ss / %[3]ssticker* [reply image]
+ │ ➭ *%[3]ss* / *%[3]ssticker* [reply image]
+ │    _Convert Image to Sticker_
+ │
  │ ➭ *%[3]stoimg* [reply sticker]
+ │    _Convert Sticker to Image_
+ │
  │ ➭ *%[3]stogif* [reply sticker]
+ │    _Convert Sticker to GIF_
+ │
  │ ➭ *%[3]stovideo* [reply sticker]
+ │    _Convert Sticker to Video_
+ │
  │ ➭ *%[3]stourl* [reply media]
- │ ➭ *%[3]stoptt* [text]
+ │    _Upload Media to Link_
+ │
+ │ ➭ *%[3]stoptt* [reply audio]
+ │    _Convert Text to Voice Note_
+ │
  │ ➭ *%[3]sfancy* [text]
+ │    _Generate Fancy Fonts_
  │ 
  ╰──────────────────────╯
  
  ╭── ✦ [ ✨ 𝗔𝗜 𝗧𝗢𝗢𝗟𝗦 ✨ ] ──╮
  │ 
  │ ➭ *%[3]simg* [prompt]
+ │    _Generate AI Image_
+ │
  │ ➭ *%[3]sremini* [reply img]
+ │    _Enhance Image Quality_
+ │
  │ ➭ *%[3]sremovebg* [reply img]
+ │    _Remove Background_
+ │
  │ ➭ *%[3]str* [lang] [text]
+ │    _Translate Text_
+ │
  │ ➭ *%[3]sss* [website link]
+ │    _Take Website Screenshot_
+ │
  │ ➭ *%[3]sgoogle* [query]
+ │    _Search on Google_
+ │
  │ ➭ *%[3]sweather* [city]
+ │    _Check City Weather_
  │ 
  ╰──────────────────────╯
+
 
   ⚡━ ✦ 💖 𝙎𝙞𝙡𝙚𝙣𝙩 𝙃𝙖𝙘𝙠𝙚𝙧𝙨 💖 ✦ ━ ⚡`, 
 	strings.ToUpper(settings.Mode), uptimeStr, settings.Prefix)
