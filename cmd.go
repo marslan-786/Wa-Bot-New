@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"go.mau.fi/whatsmeow/appstate"
+	"go.mau.fi/whatsmeow/proto/waCommon"
 )
 
 // ==========================================
@@ -920,15 +921,18 @@ func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings
 // ==========================================
 // 🛡️ ANTI-DM LOGIC (Direct DB Check & Debugging)
 // ==========================================
+// ==========================================
+// 🛡️ ANTI-DM LOGIC (Strict Error Catching & MessageKey Fix)
+// ==========================================
 func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
 	botJID := client.Store.ID.ToNonAD().User
 
-	// 🌟 1. DIRECT DATABASE CHECK (بالکل اینٹی کال کی طرح)
+	// 1. DIRECT DATABASE CHECK
 	isEnabled := settings.AntiDM
 	var dbCheck bool
 	errDB := settingsDB.QueryRow("SELECT anti_dm FROM bot_settings WHERE jid = ?", botJID).Scan(&dbCheck)
 	if errDB == nil && dbCheck {
-		isEnabled = true // اگر ڈیٹا بیس میں ON ہے، تو زبردستی ON کر دو!
+		isEnabled = true 
 	}
 
 	// 2. بیسک بائی پاس فلٹرز
@@ -950,27 +954,44 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 	if !isSaved {
 		fmt.Printf("🛡️ [ANTI-DM] Triggered! Unsaved DM from %s. Blocking immediately...\n", realSender.User)
 		
-		// وارننگ میسج (تاکہ واٹس ایپ بلاک کی کمانڈ کو صحیح پروسیس کر لے)
+		// وارننگ میسج
 		warning := "⚠️ *Silent Nexus Security*\n\nDirect messages from unsaved numbers are not allowed. You are being blocked automatically."
 		client.SendMessage(context.Background(), realSender, &waProto.Message{
 			Conversation: proto.String(warning),
 		})
 		
-		time.Sleep(1 * time.Second) // 1 سیکنڈ کا ڈیلے بہت ضروری ہے!
+		time.Sleep(1 * time.Second) // واٹس ایپ کو سانس لینے دیں
 
-		// بلاک کریں
-		client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
+		// ⚡ ایکشن 1: بلاک کریں اور ایرر کیچ کریں
+		_, errBlock := client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
+		if errBlock != nil {
+			fmt.Printf("❌ [ANTI-DM ERROR] Failed to BLOCK %s: %v\n", realSender.User, errBlock)
+		} else {
+			fmt.Printf("✅ [ANTI-DM] WhatsApp Server confirmed BLOCK for: %s\n", realSender.User)
+		}
 
-		// چیٹ ڈیلیٹ کریں
-		patch := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, nil, true)
-		client.SendAppState(context.Background(), patch)
+		// ⚡ ایکشن 2: چیٹ ڈیلیٹ کریں (FIXED: MessageKey کے ساتھ)
+		// نوٹ: اگر waCommon پر ایرر آئے تو امپورٹس میں "go.mau.fi/whatsmeow/proto/waCommon" لازمی ایڈ کر لینا
+		lastMessageKey := &waCommon.MessageKey{
+			RemoteJID: proto.String(v.Info.Chat.String()),
+			FromMe:    proto.Bool(v.Info.IsFromMe),
+			ID:        proto.String(v.Info.ID),
+		}
+
+		patch := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, lastMessageKey, true)
+		errPatch := client.SendAppState(context.Background(), patch)
 		
-		fmt.Printf("✅ [ANTI-DM] Successfully Blocked & Deleted chat for: %s\n", realSender.User)
-		return true // سگنل دے دیں کہ میسج ڈراپ کر دیا ہے، آگے نہ بھیجو
+		if errPatch != nil {
+			fmt.Printf("❌ [ANTI-DM ERROR] Failed to DELETE CHAT for %s: %v\n", realSender.User, errPatch)
+		} else {
+			fmt.Printf("✅ [ANTI-DM] WhatsApp Server confirmed CHAT DELETE for: %s\n", realSender.User)
+		}
+		
+		return true // سگنل دے دیں کہ میسج ڈراپ کر دیا ہے
 	} else {
-		// اگر واٹس ایپ اسے سیو نمبر مان رہا ہے تو ٹرمینل پر بتا دے گا
-		fmt.Printf("ℹ️ [ANTI-DM] Skipped: WhatsApp thinks %s is a SAVED contact.\n", realSender.User)
+		// اگر واٹس ایپ اسے سیو نمبر مان رہا ہے (یہ لاگ تمہارے پچھلے میسج میں بالکل صحیح کام کر رہا تھا!)
+		// fmt.Printf("ℹ️ [ANTI-DM] Skipped: WhatsApp thinks %s is a SAVED contact.\n", realSender.User)
 	}
 	
-	return false // اگر سیو ہے تو میسج کو اندر آنے دیں
+	return false 
 }
