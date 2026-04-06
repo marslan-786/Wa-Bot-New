@@ -76,24 +76,7 @@ func RunAllSessions() {
 
 		log.Printf("🟢 Session %s successfully auto-connected!", device.ID.User)
 
-		// ==========================================
-		// 🌟 FIX: Goroutine کو لوپ کے اندر رکھا گیا ہے
-		// ==========================================
-		// ہم client کو ایز اے پیرامیٹر (c) پاس کر رہے ہیں تاکہ میموری مکس نہ ہو
-	    /*	go func(c *whatsmeow.Client) {
-			// 1. بوٹ کنیکٹ ہوتے ہی فوراً ایک بار لسٹ اپڈیٹ کریں
-			if c.IsConnected() {
-				syncBotContacts(c)
-			}
-			
-			// 2. اس کے بعد ہر 5 گھنٹے کا لوپ شروع کر دیں
-			for {
-				time.Sleep(5 * time.Hour)
-				if c.IsConnected() {
-					syncBotContacts(c)
-				}
-			}
-		}(client)   */ // 👈 یہاں سے کرنٹ کلائنٹ اندر پاس ہو رہا ہے
+
 	}
 }
 
@@ -145,7 +128,6 @@ func main() {
 	initDB()
 	initSettingsDB()
 	initGroupDB()
-	initContactsDB() // 👈 نیا کانٹیکٹ ٹیبل بنانا نہ بھولنا
 
 	// سیشنز چلائیں (یہ فنکشن اب خود ہر سیشن کے لیے سنک لوپ شروع کرے گا)
 	RunAllSessions()

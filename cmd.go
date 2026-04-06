@@ -26,13 +26,24 @@ import (
 
 func EventHandler(client *whatsmeow.Client, evt interface{}) {
 	switch v := evt.(type) {
-	case *events.Message:
-		if time.Since(v.Info.Timestamp) > 60*time.Second { return }
-		go processMessageAsync(client, v)
-
-	case *events.CallOffer: // 📞 کال ڈیٹیکٹ کرنے کے لیے
+	
+	// 📞 1. کالز کو سیدھا ہینڈلر میں پکڑیں
+	case *events.CallOffer:
 		settings := getBotSettings(client)
 		go handleAntiCallLogic(client, v, settings)
+
+	// ✉️ 2. میسجز کی پروسیسنگ
+	case *events.Message:
+		// 🛑 ANTI-DELETE INTERCEPTOR: اگر کوئی میسج ڈیلیٹ کر رہا ہے تو پروسیس میں نہ بھیجیں
+		if v.Message.GetProtocolMessage() != nil && v.Message.GetProtocolMessage().GetType() == waProto.ProtocolMessage_REVOKE {
+			settings := getBotSettings(client)
+			go handleAntiDeleteRevoke(client, v, settings)
+			return // یہیں سے مڑ جائیں!
+		}
+
+		// نارمل میسجز کے لیے ٹائم چیک اور پروسیسنگ
+		if time.Since(v.Info.Timestamp) > 60*time.Second { return }
+		go processMessageAsync(client, v)
 	}
 }
 
@@ -991,49 +1002,102 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 // 🛡️ ANTI-DM & ANTI-CALL LOGIC
 // ==========================================
 
+// ==========================================
+// 🛡️ ANTI-CALL LOGIC (New Bot Structure)
+// ==========================================
+func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings BotSettings) {
+	// 1. گروپ کال یا وائس چیٹ بائی پاس
+	if c.IsGroup { return }
+
+	botJID := client.Store.ID.ToNonAD().User
+	callerJID := c.CallCreator.ToNonAD()
+
+	// 2. سیٹنگ اور اونر بائی پاس
+	if !settings.AntiCall || callerJID.User == botJID || isCallOwner(client, c.CallCreator) { 
+		return 
+	}
+
+	// 3. واٹس میو سٹور سے سیو نمبر چیک کریں (Old & Light Logic)
+	contact, err := client.Store.Contacts.GetContact(context.Background(), callerJID)
+	isSaved := (err == nil && contact.Found && contact.FullName != "")
+
+	if !isSaved {
+		client.RejectCall(context.Background(), c.CallCreator, c.CallID)
+
+		warning := "⚠️ *Silent Nexus Security*\n\nVoice/Video calls from unsaved numbers are blocked."
+		client.SendMessage(context.Background(), callerJID, &waProto.Message{
+			Conversation: proto.String(warning),
+		})
+
+		client.UpdateBlocklist(context.Background(), callerJID, events.BlocklistChangeActionBlock)
+		
+		time.Sleep(1 * time.Second)
+		patch := appstate.BuildDeleteChat(callerJID, time.Now(), nil, true)
+		client.SendAppState(context.Background(), patch)
+	}
+}
+
+// ==========================================
+// 🛡️ ANTI-DM LOGIC (New Bot Structure)
+// ==========================================
 func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
-	if !settings.AntiDM || v.Info.IsGroup || v.Info.IsFromMe || isOwner(client, v) {
+	// 1. گروپ، اپنا میسج، چینل/نیوز لیٹر اور اونر بائی پاس
+	if !settings.AntiDM || v.Info.IsGroup || v.Info.IsFromMe || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer || isOwner(client, v) {
 		return false
 	}
 
 	realSender := v.Info.Sender.ToNonAD()
-	// 🌟 FIX: context.Background() کا اضافہ کیا گیا ہے
+	if v.Info.Sender.Server == types.HiddenUserServer && !v.Info.SenderAlt.IsEmpty() {
+		realSender = v.Info.SenderAlt.ToNonAD()
+	}
+
+	// 2. واٹس میو سٹور چیک
 	contact, err := client.Store.Contacts.GetContact(context.Background(), realSender)
 	isSaved := (err == nil && contact.Found && contact.FullName != "")
 	
 	if !isSaved {
-		warning := "⚠️ *Silent Nexus Security*\n\nUnsaved number detected! Automatic block initiated."
-		client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
-			Conversation: proto.String(warning),
-		})
-
 		client.UpdateBlocklist(context.Background(), v.Info.Sender.ToNonAD(), events.BlocklistChangeActionBlock)
-		patch := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, nil, true)
-		client.SendAppState(context.Background(), patch)
+		if realSender.String() != v.Info.Sender.ToNonAD().String() {
+			client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
+		}
 
-		return true 
+		patch1 := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, nil, true)
+		client.SendAppState(context.Background(), patch1)
+		
+		patch2 := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, nil, true)
+		client.SendAppState(context.Background(), patch2)
+		
+		return true // بلاک ہو گیا
 	}
 	return false
 }
 
-func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings BotSettings) {
-	botJID := client.Store.ID.ToNonAD().User
-	callerJID := c.CallCreator.ToNonAD().User
-
-	// اونر کو چھوڑ دیں
-	if !settings.AntiCall || callerJID == botJID { return }
-
-	// اگر نمبر ڈی بی میں سیو نہیں ہے
-	if !isSavedInDB(botJID, callerJID) {
-		// 📞 کال ریجیکٹ کریں
-		client.RejectCall(context.Background(), c.CallCreator, c.CallID)
-
-		// 🚫 بلاک اور میسج
-		msg := "⚠️ *Security Alert*\nUnsaved calls are blocked."
-		client.SendMessage(context.Background(), c.CallCreator, &waProto.Message{Conversation: &msg})
-		client.UpdateBlocklist(context.Background(), c.CallCreator, events.BlocklistChangeActionBlock)
-		
-		patch := appstate.BuildDeleteChat(c.CallCreator, time.Now(), nil, true)
-		client.SendAppState(context.Background(), patch)
+// ==========================================
+// 🛡️ ANTI-DELETE REVOKE CATCHER
+// ==========================================
+func handleAntiDeleteRevoke(client *whatsmeow.Client, v *events.Message, settings BotSettings) {
+	if !settings.AntiDelete || v.Info.IsFromMe {
+		return
 	}
+
+	deletedMsgID := v.Message.GetProtocolMessage().GetKey().GetId()
+	senderJID := v.Info.Sender.ToNonAD().User
+
+	// 🌟 LID Bypass for Owner (Error 479 Fix)
+	botNumber := client.Store.ID.User
+	ownerJID := types.NewJID(botNumber, types.DefaultUserServer)
+
+	alertMsg := fmt.Sprintf("❖ ── ✦ 🛡️ 𝐀𝐍𝐓𝐈-𝐃𝐄𝐋𝐄𝐓𝐄 ✦ ── ❖\n\n"+
+		"👤 *Sender:* @%s\n"+
+		"🔍 *Message ID:* %s\n\n"+
+		"_Someone just deleted a message!_", senderJID, deletedMsgID)
+
+	client.SendMessage(context.Background(), ownerJID, &waProto.Message{
+		ExtendedTextMessage: &waProto.ExtendedTextMessage{
+			Text: proto.String(alertMsg),
+			ContextInfo: &waProto.ContextInfo{
+				MentionedJID: []string{v.Info.Sender.ToNonAD().String()},
+			},
+		},
+	})
 }
