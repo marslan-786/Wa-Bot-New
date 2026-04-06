@@ -25,6 +25,17 @@ import (
 // فائل کے اوپر امپورٹس میں "encoding/json" لازمی ایڈ کر لینا
 
 func EventHandler(client *whatsmeow.Client, evt interface{}) {
+	// 🛡️ CRASH PROTECTION (پورے ہینڈلر کو کریش ہونے سے بچائے گا)
+	defer func() {
+		if r := recover(); r != nil {
+			botID := "unknown"
+			if client != nil && client.Store != nil && client.Store.ID != nil {
+				botID = client.Store.ID.User
+			}
+			fmt.Printf("⚠️ [CRASH PREVENTED in EventHandler] Bot %s error: %v\n", botID, r)
+		}
+	}()
+
 	switch v := evt.(type) {
 	
 	// 📞 1. کالز کو سیدھا ہینڈلر میں پکڑیں
@@ -41,9 +52,18 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 			return // یہیں سے مڑ جائیں!
 		}
 
-		// نارمل میسجز کے لیے ٹائم چیک اور پروسیسنگ
-		if time.Since(v.Info.Timestamp) > 60*time.Second { return }
+		// نارمل میسجز کے لیے ٹائم چیک اور پروسیسنگ (صرف 1 منٹ سے نئے میسجز)
+		if time.Since(v.Info.Timestamp) > 60*time.Second { 
+			return 
+		}
 		go processMessageAsync(client, v)
+		
+	// 🟢 3. بوٹ کنیکٹ ہونے کا لاگ (ٹرمینل کی خوبصورتی کے لیے)
+	case *events.Connected:
+		if client.Store != nil && client.Store.ID != nil {
+			botCleanID := getCleanID(client.Store.ID.User)
+			fmt.Printf("🟢 [ONLINE] Bot %s is secured & ready to rock!\n", botCleanID)
+		}
 	}
 }
 
@@ -999,25 +1019,54 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 }
 
 // ==========================================
-// 🛡️ ANTI-DM & ANTI-CALL LOGIC
+// 🛡️ ANTI-DELETE REVOKE CATCHER (100% SQLite)
 // ==========================================
+func handleAntiDeleteRevoke(client *whatsmeow.Client, v *events.Message, settings BotSettings) {
+	// سیدھا settings.AntiDelete یوز کر رہے ہیں
+	if !settings.AntiDelete || v.Info.IsFromMe {
+		return
+	}
+
+	deletedMsgID := v.Message.GetProtocolMessage().GetKey().GetID()
+	senderJID := v.Info.Sender.ToNonAD().User
+
+	// 🌟 Error 479 Bypass for Owner
+	botNumber := client.Store.ID.User
+	ownerJID := types.NewJID(botNumber, types.DefaultUserServer)
+
+	alertMsg := fmt.Sprintf("❖ ── ✦ 🛡️ 𝐀𝐍𝐓𝐈-𝐃𝐄𝐋𝐄𝐓𝐄 ✦ ── ❖\n\n"+
+		"👤 *Sender:* @%s\n"+
+		"🔍 *Message ID:* %s\n\n"+
+		"_Someone just deleted a message!_", senderJID, deletedMsgID)
+
+	client.SendMessage(context.Background(), ownerJID, &waProto.Message{
+		ExtendedTextMessage: &waProto.ExtendedTextMessage{
+			Text: proto.String(alertMsg),
+			ContextInfo: &waProto.ContextInfo{
+				MentionedJID: []string{v.Info.Sender.ToNonAD().String()},
+			},
+		},
+	})
+}
 
 // ==========================================
-// 🛡️ ANTI-CALL LOGIC (New Bot Structure)
+// 🛡️ ANTI-CALL LOGIC (100% SQLite / No Redis)
 // ==========================================
 func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings BotSettings) {
 	// 1. گروپ کال یا وائس چیٹ بائی پاس
-	if c.IsGroup { return }
+	if c.CallCreator.Server == "g.us" || c.CallCreator.Server == types.GroupServer {
+		return 
+	}
 
 	botJID := client.Store.ID.ToNonAD().User
 	callerJID := c.CallCreator.ToNonAD()
 
-	// 2. سیٹنگ اور اونر بائی پاس
+	// 2. سیٹنگ اور اونر بائی پاس (صرف settings.AntiCall یوز ہو رہا ہے)
 	if !settings.AntiCall || callerJID.User == botJID || isCallOwner(client, c.CallCreator) { 
 		return 
 	}
 
-	// 3. واٹس میو سٹور سے سیو نمبر چیک کریں (Old & Light Logic)
+	// 3. واٹس میو سٹور سے سیو نمبر چیک کریں
 	contact, err := client.Store.Contacts.GetContact(context.Background(), callerJID)
 	isSaved := (err == nil && contact.Found && contact.FullName != "")
 
@@ -1038,10 +1087,10 @@ func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings
 }
 
 // ==========================================
-// 🛡️ ANTI-DM LOGIC (New Bot Structure)
+// 🛡️ ANTI-DM LOGIC (100% SQLite / No Redis)
 // ==========================================
 func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
-	// 1. گروپ، اپنا میسج، چینل/نیوز لیٹر اور اونر بائی پاس
+	// 1. سیدھا settings.AntiDM سے چیک ہو رہا ہے
 	if !settings.AntiDM || v.Info.IsGroup || v.Info.IsFromMe || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer || isOwner(client, v) {
 		return false
 	}
@@ -1070,34 +1119,4 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 		return true // بلاک ہو گیا
 	}
 	return false
-}
-
-// ==========================================
-// 🛡️ ANTI-DELETE REVOKE CATCHER
-// ==========================================
-func handleAntiDeleteRevoke(client *whatsmeow.Client, v *events.Message, settings BotSettings) {
-	if !settings.AntiDelete || v.Info.IsFromMe {
-		return
-	}
-
-	deletedMsgID := v.Message.GetProtocolMessage().GetKey().GetId()
-	senderJID := v.Info.Sender.ToNonAD().User
-
-	// 🌟 LID Bypass for Owner (Error 479 Fix)
-	botNumber := client.Store.ID.User
-	ownerJID := types.NewJID(botNumber, types.DefaultUserServer)
-
-	alertMsg := fmt.Sprintf("❖ ── ✦ 🛡️ 𝐀𝐍𝐓𝐈-𝐃𝐄𝐋𝐄𝐓𝐄 ✦ ── ❖\n\n"+
-		"👤 *Sender:* @%s\n"+
-		"🔍 *Message ID:* %s\n\n"+
-		"_Someone just deleted a message!_", senderJID, deletedMsgID)
-
-	client.SendMessage(context.Background(), ownerJID, &waProto.Message{
-		ExtendedTextMessage: &waProto.ExtendedTextMessage{
-			Text: proto.String(alertMsg),
-			ContextInfo: &waProto.ContextInfo{
-				MentionedJID: []string{v.Info.Sender.ToNonAD().String()},
-			},
-		},
-	})
 }
