@@ -127,11 +127,27 @@ func getBotSettings(client *whatsmeow.Client) BotSettings {
 }
 
 // کانٹیکٹ سنک کرنے کا فنکشن
+// ==========================================
+// 📇 CONTACTS DATABASE & SYNC LOGIC
+// ==========================================
+
+// 1. نیا ٹیبل بنانے کا فنکشن (یہ main.go میں کال ہو رہا ہے)
+func initContactsDB() {
+	createTable := `
+	CREATE TABLE IF NOT EXISTS bot_contacts (
+		bot_jid TEXT,
+		contact_jid TEXT,
+		full_name TEXT,
+		PRIMARY KEY (bot_jid, contact_jid)
+	);`
+	settingsDB.Exec(createTable)
+}
+
+// 2. کانٹیکٹس سنک کرنے کا فنکشن
 func syncBotContacts(client *whatsmeow.Client) {
 	botJID := client.Store.ID.ToNonAD().User
 	settingsDB.Exec("DELETE FROM bot_contacts WHERE bot_jid = ?", botJID)
 
-	// 🌟 FIX: context.Background() ایڈ کر دیا ہے
 	contacts, _ := client.Store.Contacts.GetAllContacts(context.Background())
 	
 	for jid, info := range contacts {
@@ -142,18 +158,9 @@ func syncBotContacts(client *whatsmeow.Client) {
 	}
 }
 
-// چیک کرنے کا فنکشن کہ نمبر سیو ہے یا نہیں
+// 3. نمبر چیک کرنے کا فنکشن (exists اور count والے ایررز اس میں فکس ہیں)
 func isSavedInDB(botJID string, senderJID string) bool {
-	// 🌟 FIX: exists کی جگہ count لکھ دیا ہے تاکہ ایرر نہ آئے
 	var count int
-	err := settingsDB.QueryRow("SELECT COUNT(*) FROM bot_contacts WHERE bot_jid = ? AND contact_jid = ?", 
-		botJID, senderJID).Scan(&count)
-	return err == nil && count > 0
-}
-
-// چیک کرنے کا فنکشن کہ نمبر سیو ہے یا نہیں
-func isSavedInDB(botJID string, senderJID string) bool {
-	var exists int
 	err := settingsDB.QueryRow("SELECT COUNT(*) FROM bot_contacts WHERE bot_jid = ? AND contact_jid = ?", 
 		botJID, senderJID).Scan(&count)
 	return err == nil && count > 0

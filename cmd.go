@@ -973,9 +973,11 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 // ==========================================
 
 func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
-	if !settings.AntiDM || v.Info.IsGroup || v.Info.IsFromMe || isOwner(client, v) {
+	// اگر اینٹی ڈی ایم آف ہے، یا گروپ ہے، یا چینل ہے، تو کچھ مت کرو
+	if !settings.AntiDM || v.Info.IsGroup || v.Info.Chat.Server == "newsletter" {
 		return false
 	}
+	// ... باقی لاجک
 
 	realSender := v.Info.Sender.ToNonAD()
 	// 🌟 FIX: context.Background() کا اضافہ کیا گیا ہے
@@ -998,22 +1000,34 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 }
 
 func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings BotSettings) {
+	// 🚫 سب سے پہلا فلٹر: اگر یہ گروپ کال یا گروپ وائس چیٹ ہے تو خاموشی سے واپس مڑ جائیں
+	if c.IsGroup {
+		return 
+	}
+
 	botJID := client.Store.ID.ToNonAD().User
 	callerJID := c.CallCreator.ToNonAD().User
 
-	// اونر کو چھوڑ دیں
-	if !settings.AntiCall || callerJID == botJID { return }
+	// 👑 اونر چیک (اگر آپ خود کال کر رہے ہیں تو بائی پاس کریں)
+	if !settings.AntiCall || callerJID == botJID { 
+		return 
+	}
 
-	// اگر نمبر ڈی بی میں سیو نہیں ہے
+	// 🛡️ سمارٹ ڈیٹا بیس چیک (صرف پرائیویٹ کالز کے لیے)
 	if !isSavedInDB(botJID, callerJID) {
-		// 📞 کال ریجیکٹ کریں
+		// 1. کال ریجیکٹ کریں
 		client.RejectCall(context.Background(), c.CallCreator, c.CallID)
 
-		// 🚫 بلاک اور میسج
-		msg := "⚠️ *Security Alert*\nUnsaved calls are blocked."
-		client.SendMessage(context.Background(), c.CallCreator, &waProto.Message{Conversation: &msg})
+		// 2. وارننگ میسج (صرف پرسنل میں جائے گا)
+		warning := "⚠️ *Anti-Call System*\n\nUnsaved numbers are not allowed to call. You are being blocked automatically."
+		client.SendMessage(context.Background(), c.CallCreator, &waProto.Message{
+			Conversation: proto.String(warning),
+		})
+
+		// 3. بلاک اور چیٹ صفایا
 		client.UpdateBlocklist(context.Background(), c.CallCreator, events.BlocklistChangeActionBlock)
 		
+		// چیٹ ڈیلیٹ کریں تاکہ لسٹ صاف رہے
 		patch := appstate.BuildDeleteChat(c.CallCreator, time.Now(), nil, true)
 		client.SendAppState(context.Background(), patch)
 	}
