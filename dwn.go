@@ -62,9 +62,7 @@ const SafeMarginMB = 1800.0
 // ==========================================
 // 🚀 1. API DOWNLOADER (For YT & TikTok)
 // ===================/=======================
-func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl string, isAudio bool) {
-	fmt.Printf("\n🚀 [API MODE] Passing direct link to API: %s\n", targetUrl)
-
+func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, resolution string, isAudio bool) {
 	// ==========================================
 	// 🌀 DYNAMIC REACTION ANIMATION (Loading State)
 	// ==========================================
@@ -77,7 +75,7 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl strin
 			animating = false
 		}
 	}
-	defer stopAnim()
+	defer stopAnim() // تاکہ اگر فنکشن کریش ہو یا ایرر آئے تو اینیمیشن رک جائے
 
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
@@ -86,7 +84,8 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl strin
 		i := 0
 		for {
 			select {
-			case <-doneAnim: return
+			case <-doneAnim:
+				return
 			case <-ticker.C:
 				react(client, v.Info.Chat, v.Info.ID, emojis[i%len(emojis)])
 				i++
@@ -95,74 +94,62 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl strin
 	}()
 	// ==========================================
 
-	// 1. ڈائریکٹ لنک کو API کے لیے محفوظ بنانا (URL Encode)
-	// یہ لنک کو تبدیل نہیں کرتا، صرف اسپیشل کریکٹرز کو ہینڈل کرتا ہے
-	encodedUrl := url.QueryEscape(targetUrl)
-	resolution := "mp4"
-	if isAudio {
-		resolution = "mp3" // یا جو بھی آپ کی API آڈیو کے لیے سپورٹ کرتی ہے
+	// 🔄 FALLBACK LOGIC: اگر API کام نہ کرے تو یہ فنکشن چلے گا
+	executeFallback := func() {
+		stopAnim() // پہلے اینیمیشن روکو
+		mode := "video"
+		if isAudio { mode = "audio" }
+		// ڈاؤنلوڈ اینڈ سینڈ والے انٹرنل سسٹم کو کال کر دو
+		downloadAndSend(client, v, targetUrl, mode)
 	}
-
-	apiUrl := fmt.Sprintf("https://silent-yt-dwn.up.railway.app/api/download?url=%s&resolution=%s", encodedUrl, resolution)
-	fmt.Printf("🌐 [API CALL]: %s\n", apiUrl)
 
 	httpClient := &http.Client{Timeout: 5 * time.Minute}
 
-	// 2. API کو ڈائریکٹ ہٹ کرنا
+	// 🔥 صرف یہ تبدیلی ہے: شارٹ لنک کے اسپیشل کریکٹرز کو API کے لیے محفوظ بنانا
+	encodedUrl := url.QueryEscape(targetUrl)
+	apiUrl := fmt.Sprintf("https://silent-yt-dwn.up.railway.app/api/download?url=%s&resolution=%s", encodedUrl, resolution)
+	
 	resp, err := httpClient.Get(apiUrl)
-	if err != nil {
-		stopAnim()
-		fmt.Printf("❌ [API CONNECTION ERROR]: %v\n", err)
-		replyMessage(client, v, "❌ *Error:* Failed to connect to download API.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
-		return
-	}
+	if err != nil { executeFallback(); return }
 	defer resp.Body.Close()
 
-	// 3. API کا رسپانس پڑھنا
 	var apiRes APIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiRes); err != nil || !apiRes.Success || apiRes.DownloadURL == "" {
-		stopAnim()
-		fmt.Printf("❌ [API RESPONSE ERROR]: Success status failed or Download URL empty.\n")
-		replyMessage(client, v, "❌ *Error:* API could not process this direct link.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
-		return
+		executeFallback(); return
 	}
 
-	fmt.Printf("✅ [API SUCCESS] Got download link from API!\n")
-
-	// 4. فائل ڈاؤنلوڈ کرنا
 	fileResp, err := httpClient.Get(apiRes.DownloadURL)
-	if err != nil {
-		stopAnim()
-		react(client, v.Info.Chat, v.Info.ID, "❌")
-		return
-	}
+	if err != nil { executeFallback(); return }
 	defer fileResp.Body.Close()
 
 	ext := ".mp4"
 	if isAudio { ext = ".mp3" }
 	tempFileName := fmt.Sprintf("./data/temp_%d%s", time.Now().UnixNano(), ext)
-
+	
 	outFile, err := os.Create(tempFileName)
-	if err != nil { stopAnim(); return }
-
+	if err != nil { executeFallback(); return }
+	
 	_, err = io.Copy(outFile, fileResp.Body)
 	outFile.Close()
-	if err != nil { os.Remove(tempFileName); stopAnim(); return }
+	if err != nil { 
+		os.Remove(tempFileName)
+		executeFallback() 
+		return 
+	}
+
 	defer os.Remove(tempFileName)
 
 	fileInfo, err := os.Stat(tempFileName)
-	if err != nil { stopAnim(); return }
-
+	if err != nil { executeFallback(); return }
+	
 	fileSize := fileInfo.Size()
 	var filesToSend []string
 
-	// 🔥 ڈاؤن لوڈ مکمل! اینیمیشن روک دیں
-	stopAnim()
+	// 🔥 ڈاؤن لوڈ مکمل! اب اینیمیشن کو روک دیں تاکہ اپلوڈ والے ایموجیز لگ سکیں
+	stopAnim() 
 
 	if fileSize > int64(MaxWhatsAppSize) && !isAudio {
-		react(client, v.Info.Chat, v.Info.ID, "✂️")
+		react(client, v.Info.Chat, v.Info.ID, "✂️") 
 		parts, err := splitVideoSmart(tempFileName, SafeMarginMB)
 		if err != nil || len(parts) == 0 {
 			filesToSend = append(filesToSend, tempFileName)
@@ -175,7 +162,6 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl strin
 
 	react(client, v.Info.Chat, v.Info.ID, "📤")
 
-	// 5. فائنل سینڈنگ
 	for i, filePath := range filesToSend {
 		uploadAndSendFile(client, v, filePath, apiRes.Title, isAudio, i+1, len(filesToSend))
 		if filePath != tempFileName {
@@ -185,6 +171,7 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl strin
 
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
+
 
 func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mode string, optionalFormat ...string) {
 	// ==========================================
