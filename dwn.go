@@ -61,8 +61,8 @@ const SafeMarginMB = 1800.0
 
 // ==========================================
 // 🚀 1. API DOWNLOADER (For YT & TikTok)
-// ==========================================
-func downloadDirectFromAPI(client *whatsmeow.Client, v *events.Message, targetUrl string, isAudio bool) {
+// ===================/=======================
+func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl string, isAudio bool) {
 	fmt.Printf("\n🚀 [API MODE] Passing direct link to API: %s\n", targetUrl)
 
 	// ==========================================
