@@ -105,7 +105,8 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 
 	httpClient := &http.Client{Timeout: 5 * time.Minute}
 
-	apiUrl := fmt.Sprintf("https://silent-yt-dwn.up.railway.app/api/download?url=%s&resolution=%s", targetUrl, resolution)
+	encodedUrl := url.QueryEscape(targetUrl)
+    apiUrl := fmt.Sprintf("https://silent-yt-dwn.app.railway.app/api/download?url=%s&resolution=%s", encodedUrl, resolution)
 	resp, err := httpClient.Get(apiUrl)
 	if err != nil { executeFallback(); return }
 	defer resp.Body.Close()
