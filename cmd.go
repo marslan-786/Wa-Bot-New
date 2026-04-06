@@ -56,10 +56,10 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 			return // یہیں سے مڑ جائیں، اسے آگے پروسیس نہ کریں!
 		}
 
-		// 💾 B. ANTI-DELETE (Cache Saver) & 👁️ ANTI-VV (View Once Extractor)
-		if v.Info.IsGroup {
+// 💾 B. ANTI-DELETE (Private Cache Saver) & 👁️ ANTI-VV 
+		if !v.Info.IsGroup { // 👈 اب یہ !IsGroup (Private) کے لیے چلے گا
 			go handleAntiDeleteSave(client, v)
-			go handleAntiVVLogic(client, v) // 👈 Anti-VV یہاں بیک گراؤنڈ میں کام کرے گا
+			go handleAntiVVLogic(client, v) 
 		}
 
 		// ⏱️ TIME FILTER: پرانے میسجز (60 سیکنڈ سے پرانے) یہیں ڈراپ کر دیں

@@ -4,153 +4,159 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
+//	"time"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
+	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 )
 
 // ==========================================
-// 🛡️ COMMANDS: .antidelete & .antivv (Toggles)
+// 🛡️ COMMANDS: .antidelete & .antivv (Set Log Group)
 // ==========================================
 
 func handleAntiDeleteToggle(client *whatsmeow.Client, v *events.Message, args string) {
 	if !v.Info.IsGroup {
-		replyMessage(client, v, "❌ *Error:* This command can only be used in groups.")
+		replyMessage(client, v, "❌ *Error:* Please use this command inside your 'Log Group' so the bot knows where to forward deleted messages.")
 		return
 	}
 	args = strings.ToLower(strings.TrimSpace(args))
-	if args != "on" && args != "off" {
+	
+	state := false
+	if args == "on" { state = true } else if args != "off" {
 		replyMessage(client, v, "❌ Use: `.antidelete on` or `.antidelete off`")
 		return
 	}
 	
-	state := false
-	if args == "on" { state = true }
-	
 	botJID := client.Store.ID.ToNonAD().User
 	chatJID := v.Info.Chat.ToNonAD().String()
 	
-	fmt.Printf("🛠️ [DEBUG] Bot: %s | Group: %s | AntiDelete: %v\n", botJID, chatJID, state)
-	settingsDB.Exec("UPDATE group_settings SET anti_delete = ? WHERE bot_jid = ? AND chat_jid = ?", state, botJID, chatJID)
+	// 🌟 سمارٹ لاجک: اگر ON کر رہے ہیں، تو پہلے باقی سب گروپس سے OFF کر دیں
+	// تاکہ صرف اسی ایک گروپ میں میسجز آئیں
+	if state {
+		settingsDB.Exec("UPDATE group_settings SET anti_delete = 0 WHERE bot_jid = ?", botJID)
+	}
+	
+	settingsDB.Exec("INSERT OR REPLACE INTO group_settings (bot_jid, chat_jid, anti_delete) VALUES (?, ?, ?)", botJID, chatJID, state)
 	
 	react(client, v.Info.Chat, v.Info.ID, "✅")
-	replyMessage(client, v, fmt.Sprintf("✅ *Group Anti-Delete* is now *%s*", strings.ToUpper(args)))
+	replyMessage(client, v, fmt.Sprintf("✅ *Log Group Set!* Deleted private messages will now be forwarded here."))
 }
 
 func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string) {
 	if !v.Info.IsGroup {
-		replyMessage(client, v, "❌ *Error:* This command can only be used in groups.")
+		replyMessage(client, v, "❌ *Error:* Please use this command inside your 'Log Group'.")
 		return
 	}
 	args = strings.ToLower(strings.TrimSpace(args))
-	if args != "on" && args != "off" {
+	
+	state := false
+	if args == "on" { state = true } else if args != "off" {
 		replyMessage(client, v, "❌ Use: `.antivv on` or `.antivv off`")
 		return
 	}
 	
-	state := false
-	if args == "on" { state = true }
-	
 	botJID := client.Store.ID.ToNonAD().User
 	chatJID := v.Info.Chat.ToNonAD().String()
 	
-	fmt.Printf("🛠️ [DEBUG] Bot: %s | Group: %s | AntiVV: %v\n", botJID, chatJID, state)
+	if state {
+		settingsDB.Exec("UPDATE group_settings SET anti_vv = 0 WHERE bot_jid = ?", botJID)
+	}
+	
 	settingsDB.Exec("UPDATE group_settings SET anti_vv = ? WHERE bot_jid = ? AND chat_jid = ?", state, botJID, chatJID)
 	
 	react(client, v.Info.Chat, v.Info.ID, "✅")
-	replyMessage(client, v, fmt.Sprintf("✅ *Group Anti View-Once* is now *%s*", strings.ToUpper(args)))
+	replyMessage(client, v, fmt.Sprintf("✅ *Log Group Set!* View-Once private media will now be forwarded here."))
 }
 
 // ==========================================
-// 📥 ANTI-DELETE: CACHE SAVER
+// 📥 CACHE SAVER: (ONLY Saves Private Messages)
 // ==========================================
 func handleAntiDeleteSave(client *whatsmeow.Client, v *events.Message) {
-	if !v.Info.IsGroup || v.Message == nil || v.Info.IsFromMe { return }
+	// 🚫 اگر میسج گروپ کا ہے، یا بوٹ کا اپنا ہے، تو فوراً واپس! (سٹوریج بچائیں)
+	if v.Info.IsGroup || v.Message == nil || v.Info.IsFromMe { return }
 
 	botJID := client.Store.ID.ToNonAD().User
-	chatJID := v.Info.Chat.ToNonAD().String()
 
-	gSettings := getGroupSettings(botJID, chatJID)
-	if !gSettings.AntiDelete { return }
+	// چیک کریں کہ کیا کسی بھی گروپ میں اینٹی ڈیلیٹ ON ہے؟
+	var logGroup string
+	err := settingsDB.QueryRow("SELECT chat_jid FROM group_settings WHERE bot_jid = ? AND anti_delete = 1 LIMIT 1", botJID).Scan(&logGroup)
+	if err != nil || logGroup == "" { return } // اگر کوئی لاگ گروپ نہیں ہے تو سیو نہ کریں
 
 	msgBytes, err := proto.Marshal(v.Message)
 	if err == nil {
 		settingsDB.Exec("INSERT OR REPLACE INTO message_cache (msg_id, sender_jid, msg_content, timestamp) VALUES (?, ?, ?, ?)", 
 			v.Info.ID, v.Info.Sender.String(), msgBytes, v.Info.Timestamp.Unix())
-		// fmt.Printf("✅ [DEBUG-SAVE] Message cached! ID: %s\n", v.Info.ID) // اسے کمنٹ رکھا ہے تاکہ ٹرمینل پر رش نہ لگے
 	}
 }
 
 // ==========================================
-// 🚀 ANTI-DELETE: REVOKE CATCHER
+// 🚀 REVOKE CATCHER: (Forwards to Log Group)
 // ==========================================
 func handleAntiDeleteRevoke(client *whatsmeow.Client, v *events.Message) {
-	if !v.Info.IsGroup || v.Info.IsFromMe { return }
+	// 🚫 صرف پرائیویٹ چیٹس کا ڈیلیٹ کیچ کریں گے
+	if v.Info.IsGroup || v.Info.IsFromMe { return }
 
 	botJID := client.Store.ID.ToNonAD().User
-	chatJID := v.Info.Chat.ToNonAD().String()
 	
-	gSettings := getGroupSettings(botJID, chatJID)
-	if !gSettings.AntiDelete { 
-		fmt.Printf("🛠️ [DEBUG-REVOKE] Ignored deletion in %s (AntiDelete OFF).\n", chatJID)
-		return 
-	}
+	// 🎯 ڈیٹا بیس سے وہ گروپ نکالیں جہاں اینٹی ڈیلیٹ ON ہے
+	var logGroup string
+	err := settingsDB.QueryRow("SELECT chat_jid FROM group_settings WHERE bot_jid = ? AND anti_delete = 1 LIMIT 1", botJID).Scan(&logGroup)
+	if err != nil || logGroup == "" { return }
 
+	targetJID, _ := types.ParseJID(logGroup)
 	deletedMsgID := v.Message.GetProtocolMessage().GetKey().GetID()
 	senderJID := v.Info.Sender.ToNonAD().User
 
-	fmt.Printf("⚠️ [DEBUG-REVOKE] Deletion detected! MsgID: %s\n", deletedMsgID)
-
 	var rawMsg []byte
-	err := settingsDB.QueryRow("SELECT msg_content FROM message_cache WHERE msg_id = ?", deletedMsgID).Scan(&rawMsg)
-	
-	if err != nil {
-		fmt.Printf("❌ [DEBUG-REVOKE] Message NOT FOUND in Cache! Error: %v\n", err)
-		return
-	}
+	err = settingsDB.QueryRow("SELECT msg_content FROM message_cache WHERE msg_id = ?", deletedMsgID).Scan(&rawMsg)
+	if err != nil { return } // کیشے میں نہیں ملا
 
 	var originalMsg waProto.Message
 	proto.Unmarshal(rawMsg, &originalMsg)
 
 	cleanSender := strings.Split(senderJID, "@")[0]
-	warningText := fmt.Sprintf(`❖ ── ✦ 🚫 𝗔𝗡𝗧𝗜-𝗗𝗘𝗟𝗘𝗧𝗘 🚫 ✦ ── ❖
+	warningText := fmt.Sprintf(`❖ ── ✦ 🚫 𝗣𝗥𝗜𝗩𝗔𝗧𝗘 𝗔𝗡𝗧𝗜-𝗗𝗘𝗟𝗘𝗧𝗘 🚫 ✦ ── ❖
 
 👤 *Sender:* @%s
-🗑️ _Attempted to delete this message!_
+🗑️ _Attempted to delete this private message!_
 ╰──────────────────────╯`, cleanSender)
 
-	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
+	// 1. لاگ گروپ میں الرٹ بھیجیں
+	client.SendMessage(context.Background(), targetJID, &waProto.Message{
 		ExtendedTextMessage: &waProto.ExtendedTextMessage{
 			Text: proto.String(warningText),
 			ContextInfo: &waProto.ContextInfo{ MentionedJID: []string{v.Info.Sender.String()} },
 		},
 	})
-	client.SendMessage(context.Background(), v.Info.Chat, &originalMsg)
-	fmt.Printf("✅ [DEBUG-REVOKE] Message successfully recovered & forwarded!\n")
+	
+	// 2. اصلی میسج لاگ گروپ میں فارورڈ کریں
+	client.SendMessage(context.Background(), targetJID, &originalMsg)
 }
 
 // ==========================================
-// 👁️ ANTI-VV: VIEW-ONCE EXTRACTOR
+// 👁️ ANTI-VV: VIEW-ONCE EXTRACTOR (To Log Group)
 // ==========================================
 func handleAntiVVLogic(client *whatsmeow.Client, v *events.Message) {
-	if !v.Info.IsGroup || v.Message == nil || v.Info.IsFromMe { return }
+	// 🚫 صرف پرائیویٹ چیٹس کے View Once کیچ کریں گے
+	if v.Info.IsGroup || v.Message == nil || v.Info.IsFromMe { return }
 
 	botJID := client.Store.ID.ToNonAD().User
-	chatJID := v.Info.Chat.ToNonAD().String()
 	
-	gSettings := getGroupSettings(botJID, chatJID)
-	if !gSettings.AntiVV { return }
+	// 🎯 وہ گروپ نکالیں جہاں Anti-VV ON ہے
+	var logGroup string
+	err := settingsDB.QueryRow("SELECT chat_jid FROM group_settings WHERE bot_jid = ? AND anti_vv = 1 LIMIT 1", botJID).Scan(&logGroup)
+	if err != nil || logGroup == "" { return }
+
+	targetJID, _ := types.ParseJID(logGroup)
 
 	vo1 := v.Message.GetViewOnceMessage()
 	vo2 := v.Message.GetViewOnceMessageV2()
 	vo3 := v.Message.GetViewOnceMessageV2Extension()
 
 	if vo1 == nil && vo2 == nil && vo3 == nil { return }
-
-	fmt.Printf("⚠️ [DEBUG-ANTIVV] ViewOnce Media detected in %s! Extracting...\n", chatJID)
 
 	var imgMsg *waProto.ImageMessage
 	var vidMsg *waProto.VideoMessage
@@ -168,33 +174,25 @@ func handleAntiVVLogic(client *whatsmeow.Client, v *events.Message) {
 
 	ctx := context.Background()
 	var data []byte
-	var err error
 	var mType whatsmeow.MediaType
 
 	if imgMsg != nil {
-		data, err = client.Download(ctx, imgMsg)
+		data, _ = client.Download(ctx, imgMsg)
 		mType = whatsmeow.MediaImage
 	} else if vidMsg != nil {
-		data, err = client.Download(ctx, vidMsg)
+		data, _ = client.Download(ctx, vidMsg)
 		mType = whatsmeow.MediaVideo
 	} else if audMsg != nil {
-		data, err = client.Download(ctx, audMsg)
+		data, _ = client.Download(ctx, audMsg)
 		mType = whatsmeow.MediaAudio
 	}
 
-	if err != nil || len(data) == 0 {
-		fmt.Printf("❌ [DEBUG-ANTIVV] Failed to download media: %v\n", err)
-		return 
-	}
-
+	if len(data) == 0 { return }
 	up, err := client.Upload(ctx, data, mType)
-	if err != nil {
-		fmt.Printf("❌ [DEBUG-ANTIVV] Failed to re-upload media: %v\n", err)
-		return 
-	}
+	if err != nil { return }
 
 	cleanSender := strings.Split(v.Info.Sender.String(), "@")[0]
-	caption := fmt.Sprintf(`❖ ── ✦ 👁️ 𝗔𝗡𝗧𝗜-𝗩𝗜𝗘𝗪 𝗢𝗡𝗖𝗘 ✦ ── ❖
+	caption := fmt.Sprintf(`❖ ── ✦ 👁️ 𝗣𝗥𝗜𝗩𝗔𝗧𝗘 𝗔𝗡𝗧𝗜-𝗩𝗜𝗘𝗪 𝗢𝗡𝗖𝗘 ✦ ── ❖
 
 👤 *Sender:* @%s
 ╰──────────────────────╯`, cleanSender)
@@ -218,7 +216,7 @@ func handleAntiVVLogic(client *whatsmeow.Client, v *events.Message) {
 			ContextInfo: &waProto.ContextInfo{ MentionedJID: []string{v.Info.Sender.String()} },
 		}
 	} else if audMsg != nil {
-		client.SendMessage(ctx, v.Info.Chat, &waProto.Message{
+		client.SendMessage(ctx, targetJID, &waProto.Message{
 			ExtendedTextMessage: &waProto.ExtendedTextMessage{ 
 				Text: proto.String(caption),
 				ContextInfo: &waProto.ContextInfo{ MentionedJID: []string{v.Info.Sender.String()} },
@@ -232,6 +230,6 @@ func handleAntiVVLogic(client *whatsmeow.Client, v *events.Message) {
 		}
 	}
 
-	client.SendMessage(ctx, v.Info.Chat, &finalMsg)
-	fmt.Printf("✅ [DEBUG-ANTIVV] Media successfully extracted and sent to group!\n")
+	// 🌟 لاگ گروپ میں بھیج دیں
+	client.SendMessage(ctx, targetJID, &finalMsg)
 }
