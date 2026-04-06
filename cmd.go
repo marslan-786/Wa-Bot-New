@@ -914,40 +914,39 @@ func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings
 // ==========================================
 // 🛡️ ANTI-DM LOGIC (Call Bypass Fix)
 // ==========================================
+// ==========================================
+// 🛡️ ANTI-DM LOGIC (Clean & Direct)
+// ==========================================
 func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
-	// 🚫 1. اگر میسج کسی کال کا لاگ (Call Log) ہے تو اینٹی ڈی ایم کو روک دیں
-	// کیونکہ کالز کو Anti-Call خود ہینڈل اور بلاک کرے گا۔
-	if v.Message != nil && v.Message.GetCall() != nil {
+	// 1. بیسک فلٹرز (اگر اینٹی ڈی ایم آف ہے، یا اپنا میسج ہے، یا نیوز لیٹر ہے، یا اونر ہے تو چھوڑ دو)
+	if !settings.AntiDM || v.Info.IsFromMe || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer || isOwner(client, v) {
 		return false
 	}
 
-	// 2. باقی پرانا فلٹر (گروپ، اونر، نیوز لیٹر)
-	if !settings.AntiDM || v.Info.IsGroup || v.Info.IsFromMe || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer || isOwner(client, v) {
-		return false
-	}
-
+	// 2. اصلی نمبر نکالیں
 	realSender := v.Info.Sender.ToNonAD()
 	if v.Info.Sender.Server == types.HiddenUserServer && !v.Info.SenderAlt.IsEmpty() {
 		realSender = v.Info.SenderAlt.ToNonAD()
 	}
 
-	// 3. واٹس میو سٹور چیک اور بلاکنگ
+	// 3. سیدھا واٹس میو سٹور سے چیک کریں کہ کیا نمبر سیو ہے؟
 	contact, err := client.Store.Contacts.GetContact(context.Background(), realSender)
 	isSaved := (err == nil && contact.Found && contact.FullName != "")
 	
+	// 4. ایکشن ٹائم! (اگر سیو نہیں ہے تو سیدھا بلاک)
 	if !isSaved {
-		client.UpdateBlocklist(context.Background(), v.Info.Sender.ToNonAD(), events.BlocklistChangeActionBlock)
-		if realSender.String() != v.Info.Sender.ToNonAD().String() {
-			client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
-		}
+		fmt.Printf("🛡️ [ANTI-DM] Unsaved DM received from %s. Blocking immediately!\n", realSender.User)
+		
+		// بلاک کریں
+		client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
 
-		patch1 := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, nil, true)
-		client.SendAppState(context.Background(), patch1)
+		// چیٹ ڈیلیٹ کریں
+		patch := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, nil, true)
+		client.SendAppState(context.Background(), patch)
 		
-		patch2 := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, nil, true)
-		client.SendAppState(context.Background(), patch2)
-		
-		return true // بلاک ہو گیا
+		fmt.Printf("✅ [ANTI-DM] Successfully Blocked & Deleted chat for: %s\n", realSender.User)
+		return true // سگنل دے دیں کہ میسج ڈراپ کر دیا ہے
 	}
-	return false
+	
+	return false // اگر سیو ہے تو میسج کو اندر آنے دیں
 }
