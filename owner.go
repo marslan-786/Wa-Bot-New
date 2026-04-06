@@ -136,6 +136,39 @@ func isOwner(client *whatsmeow.Client, v *events.Message) bool {
 	return senderNum == masterOwner
 }
 
+// ==========================================
+// ⚙️ HELPER: Toggle Settings (Dynamic ON/OFF)
+// ==========================================
+func handleToggleSettings(client *whatsmeow.Client, v *events.Message, columnName string, args string) {
+	args = strings.ToLower(strings.TrimSpace(args))
+	
+	if args != "on" && args != "off" {
+		replyMessage(client, v, "❌ *Usage:* `.command on` or `.command off`")
+		return
+	}
+
+	state := false
+	if args == "on" { state = true }
+
+	cleanJID := client.Store.ID.ToNonAD().User
+
+	// 🌟 DYNAMIC QUERY: یہ جس بھی کالم کا نام دو گے (anti_dm, anti_call وغیرہ)، اسے اپڈیٹ کر دے گا
+	query := fmt.Sprintf("UPDATE bot_settings SET %s = ? WHERE jid = ?", columnName)
+	_, err := settingsDB.Exec(query, state, cleanJID)
+
+	if err != nil {
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		replyMessage(client, v, "❌ Database error!")
+		return
+	}
+
+	react(client, v.Info.Chat, v.Info.ID, "✅")
+	
+	// خوبصورت ریپلائی بنانے کے لیے (مثلاً "anti_dm" کو "ANTI DM" کر دے گا)
+	featureName := strings.ReplaceAll(strings.ToUpper(columnName), "_", " ")
+	replyMessage(client, v, fmt.Sprintf("🛡️ *%s* is now *%s*", featureName, strings.ToUpper(args)))
+}
+
 func handleToggleSetting(client *whatsmeow.Client, v *events.Message, settingName string, dbColumn string, args string) {
 	args = strings.ToLower(strings.TrimSpace(args))
 	if args != "on" && args != "off" {

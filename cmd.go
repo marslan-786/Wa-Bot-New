@@ -7,7 +7,7 @@ import (
 	"strings"
 	"math/rand"
 	"time"
-	"encoding/json"
+//	"encoding/json"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
@@ -972,70 +972,6 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 	
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 	replyMessage(client, v, fmt.Sprintf("✅ *Anti View-Once* is now *%s*", strings.ToUpper(args)))
-}
-
-// ==========================================
-// 🛡️ ANTI-DM SYSTEM (Block & Delete Unsaved)
-// ==========================================
-func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
-	// اگر Anti-DM آف ہے، یا گروپ ہے، یا اپنا میسج ہے، یا اونر خود ہے -> تو کچھ مت کرو
-	if !settings.AntiDM || v.Info.IsGroup || v.Info.IsFromMe || isOwner(client, v) {
-		return false
-	}
-
-	// 🟢 JID EXTRACTION LOGIC (LID سے اصلی نمبر نکالنے کا ہیک)
-	var realSender types.JID
-	if v.Info.Sender.Server == types.HiddenUserServer {
-		if !v.Info.SenderAlt.IsEmpty() {
-			realSender = v.Info.SenderAlt.ToNonAD() 
-		} else {
-			realSender = v.Info.Sender.ToNonAD()
-		}
-	} else {
-		realSender = v.Info.Sender.ToNonAD()
-	}
-
-	// 📇 کانٹیکٹ چیک کریں (Store سے)
-	contact, err := client.Store.Contacts.GetContact(realSender)
-	isSaved := (err == nil && contact.Found && contact.FullName != "")
-	
-	// 🛑 اگر نمبر سیو نہیں ہے (Unknown Number)
-	if !isSaved {
-		// 1. بلاک کرنے کی کوشش (Dual Try - بزنس اور نارمل دونوں کے لیے)
-		_, err := client.UpdateBlocklist(context.Background(), v.Info.Sender.ToNonAD(), events.BlocklistChangeActionBlock)
-		if err != nil {
-			client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
-		}
-
-		// 2. چیٹ ڈیلیٹ کریں (اسکرین سے غائب کرنے کے لیے)
-		lastMessageKey := &waProto.MessageKey{
-			RemoteJID: proto.String(v.Info.Chat.String()),
-			FromMe:    proto.Bool(v.Info.IsFromMe),
-			ID:        proto.String(v.Info.ID),
-		}
-
-		patchInfo1 := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, lastMessageKey, true)
-		client.SendAppState(context.Background(), patchInfo1)
-		
-		// اصلی نمبر کے لیے بھی ڈیلیٹ کی کمانڈ بھیجیں تاکہ کوئی کسر نہ رہے
-		patchInfo2 := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, nil, true)
-		client.SendAppState(context.Background(), patchInfo2)
-		
-		// 3. اونر کو پرائیویٹ وارننگ بھیجیں (Mentions کے ساتھ)
-		ownerJID := client.Store.ID.ToNonAD()
-		warningText := fmt.Sprintf("❖ ── ✦ 🛡️ 𝗔𝗡𝗧𝗜-𝗗𝗠 ✦ ── ❖\n\n_Successfully Blocked & Deleted chat of an unsaved number!_\n\n👤 *Blocked User:* @%s", realSender.User)
-		
-		client.SendMessage(context.Background(), ownerJID, &waProto.Message{
-			ExtendedTextMessage: &waProto.ExtendedTextMessage{
-				Text: proto.String(warningText),
-				ContextInfo: &waProto.ContextInfo{ MentionedJID: []string{realSender.String()} },
-			},
-		})
-
-		return true // ریٹرن True کا مطلب ہے کہ ہم نے بندے کو اڑا دیا ہے، اب مزید پروسیسنگ روک دو
-	}
-
-	return false
 }
 
 // ==========================================
