@@ -85,6 +85,7 @@ COPY --from=node-builder /app/package.json ./package.json
 COPY tiktok_search.py ./tiktok_search.py
 COPY index.html ./index.html
 COPY pic.png ./pic.png
+COPY rvc_engine.py ./rvc_engine.py
 
 RUN mkdir -p store logs
 ENV PORT=8080
