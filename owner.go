@@ -30,6 +30,7 @@ type BotSettings struct {
 	AntiVV            bool
 	AntiDM            bool
 	AntiCall          bool
+	AntiDelete        bool
 }
 
 func initSettingsDB() {
@@ -73,6 +74,7 @@ func initSettingsDB() {
 	addColumnSafe("bot_settings", "anti_vv", "BOOLEAN DEFAULT 0")
 	addColumnSafe("bot_settings", "anti_dm", "BOOLEAN DEFAULT 0")
 	addColumnSafe("bot_settings", "anti_call", "BOOLEAN DEFAULT 0")
+	addColumnSafe("bot_settings", "anti_delete", "BOOLEAN DEFAULT 0")
 
 	// 3. اینٹی ڈیلیٹ کے لیے میسج کیش ٹیبل
 	createCacheQuery := `
