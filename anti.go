@@ -16,6 +16,9 @@ import (
 // ==========================================
 // 🛡️ COMMANDS: .antidelete & .antivv (Set Log Group)
 // ==========================================
+// ==========================================
+// 🛡️ COMMANDS: .antidelete & .antivv (Smart Toggles)
+// ==========================================
 
 func handleAntiDeleteToggle(client *whatsmeow.Client, v *events.Message, args string) {
 	if !v.Info.IsGroup {
@@ -23,9 +26,7 @@ func handleAntiDeleteToggle(client *whatsmeow.Client, v *events.Message, args st
 		return
 	}
 	args = strings.ToLower(strings.TrimSpace(args))
-	
-	state := false
-	if args == "on" { state = true } else if args != "off" {
+	if args != "on" && args != "off" {
 		replyMessage(client, v, "❌ Use: `.antidelete on` or `.antidelete off`")
 		return
 	}
@@ -33,14 +34,42 @@ func handleAntiDeleteToggle(client *whatsmeow.Client, v *events.Message, args st
 	botJID := client.Store.ID.ToNonAD().User
 	chatJID := v.Info.Chat.ToNonAD().String()
 	
-	if state {
+	// 🔍 1. ڈیٹا بیس سے موجودہ سٹیٹس چیک کریں
+	var currentState bool
+	err := settingsDB.QueryRow("SELECT anti_delete FROM group_settings WHERE bot_jid = ? AND chat_jid = ?", botJID, chatJID).Scan(&currentState)
+	if err != nil { currentState = false } // اگر ریکارڈ نہیں ہے تو مطلب OFF ہے
+
+	if args == "on" {
+		// اگر پہلے ہی ON ہے
+		if currentState {
+			replyMessage(client, v, "⚠️ *Already ON:* This group is already your active Log Group for Anti-Delete.")
+			return
+		}
+		
+		// باقی سب گروپس سے OFF کر کے اس گروپ میں ON کریں
 		settingsDB.Exec("UPDATE group_settings SET anti_delete = 0 WHERE bot_jid = ?", botJID)
+		
+		// 🌟 سمارٹ اپڈیٹ (دوسری سیٹنگز کو خراب کیے بغیر)
+		query := `INSERT INTO group_settings (bot_jid, chat_jid, anti_delete) VALUES (?, ?, 1) 
+				  ON CONFLICT(bot_jid, chat_jid) DO UPDATE SET anti_delete = 1`
+		settingsDB.Exec(query, botJID, chatJID)
+		
+		react(client, v.Info.Chat, v.Info.ID, "✅")
+		replyMessage(client, v, "✅ *Log Group Activated!* Deleted private messages will now be forwarded here.")
+		
+	} else if args == "off" {
+		// اگر پہلے ہی OFF ہے
+		if !currentState {
+			replyMessage(client, v, "⚠️ *Already OFF:* Anti-Delete logging is not active in this group.")
+			return
+		}
+		
+		// صرف اسی گروپ سے OFF کریں
+		settingsDB.Exec("UPDATE group_settings SET anti_delete = 0 WHERE bot_jid = ? AND chat_jid = ?", botJID, chatJID)
+		
+		react(client, v.Info.Chat, v.Info.ID, "✅")
+		replyMessage(client, v, "❌ *Log Group Deactivated!* Anti-Delete forwarding is now OFF.")
 	}
-	
-	settingsDB.Exec("INSERT OR REPLACE INTO group_settings (bot_jid, chat_jid, anti_delete) VALUES (?, ?, ?)", botJID, chatJID, state)
-	
-	react(client, v.Info.Chat, v.Info.ID, "✅")
-	replyMessage(client, v, fmt.Sprintf("✅ *Log Group Set!* Deleted private messages will now be forwarded here."))
 }
 
 func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string) {
@@ -49,9 +78,7 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 		return
 	}
 	args = strings.ToLower(strings.TrimSpace(args))
-	
-	state := false
-	if args == "on" { state = true } else if args != "off" {
+	if args != "on" && args != "off" {
 		replyMessage(client, v, "❌ Use: `.antivv on` or `.antivv off`")
 		return
 	}
@@ -59,14 +86,41 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 	botJID := client.Store.ID.ToNonAD().User
 	chatJID := v.Info.Chat.ToNonAD().String()
 	
-	if state {
+	// 🔍 1. ڈیٹا بیس سے موجودہ سٹیٹس چیک کریں
+	var currentState bool
+	err := settingsDB.QueryRow("SELECT anti_vv FROM group_settings WHERE bot_jid = ? AND chat_jid = ?", botJID, chatJID).Scan(&currentState)
+	if err != nil { currentState = false }
+
+	if args == "on" {
+		// اگر پہلے ہی ON ہے
+		if currentState {
+			replyMessage(client, v, "⚠️ *Already ON:* This group is already your active Log Group for Anti-VV.")
+			return
+		}
+		
+		// باقی سب گروپس سے OFF کر کے اس گروپ میں ON کریں
 		settingsDB.Exec("UPDATE group_settings SET anti_vv = 0 WHERE bot_jid = ?", botJID)
+		
+		query := `INSERT INTO group_settings (bot_jid, chat_jid, anti_vv) VALUES (?, ?, 1) 
+				  ON CONFLICT(bot_jid, chat_jid) DO UPDATE SET anti_vv = 1`
+		settingsDB.Exec(query, botJID, chatJID)
+		
+		react(client, v.Info.Chat, v.Info.ID, "✅")
+		replyMessage(client, v, "✅ *Log Group Activated!* View-Once private media will now be forwarded here.")
+		
+	} else if args == "off" {
+		// اگر پہلے ہی OFF ہے
+		if !currentState {
+			replyMessage(client, v, "⚠️ *Already OFF:* Anti-VV logging is not active in this group.")
+			return
+		}
+		
+		// صرف اسی گروپ سے OFF کریں
+		settingsDB.Exec("UPDATE group_settings SET anti_vv = 0 WHERE bot_jid = ? AND chat_jid = ?", botJID, chatJID)
+		
+		react(client, v.Info.Chat, v.Info.ID, "✅")
+		replyMessage(client, v, "❌ *Log Group Deactivated!* Anti-VV forwarding is now OFF.")
 	}
-	
-	settingsDB.Exec("UPDATE group_settings SET anti_vv = ? WHERE bot_jid = ? AND chat_jid = ?", state, botJID, chatJID)
-	
-	react(client, v.Info.Chat, v.Info.ID, "✅")
-	replyMessage(client, v, fmt.Sprintf("✅ *Log Group Set!* View-Once private media will now be forwarded here."))
 }
 
 // ==========================================
