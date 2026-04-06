@@ -910,19 +910,7 @@ func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings
 }
 
 // ==========================================
-// 🛡️ ANTI-DM LOGIC (100% SQLite / No Redis)
-// ==========================================
-// ==========================================
-// 🛡️ ANTI-DM LOGIC (Call Bypass Fix)
-// ==========================================
-// ==========================================
-// 🛡️ ANTI-DM LOGIC (Clean & Direct)
-// ==========================================
-// ==========================================
-// 🛡️ ANTI-DM LOGIC (Direct DB Check & Debugging)
-// ==========================================
-// ==========================================
-// 🛡️ ANTI-DM LOGIC (Strict Error Catching & MessageKey Fix)
+// 🛡️ ANTI-DM LOGIC (Double Trigger: Block & Delete for JID + LID)
 // ==========================================
 func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
 	botJID := client.Store.ID.ToNonAD().User
@@ -935,62 +923,79 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 		isEnabled = true 
 	}
 
-	// 2. بیسک بائی پاس فلٹرز
 	if !isEnabled || v.Info.IsFromMe || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer || isOwner(client, v) {
 		return false
 	}
 
-	// 3. اصلی نمبر نکالیں
-	realSender := v.Info.Sender.ToNonAD()
-	if v.Info.Sender.Server == types.HiddenUserServer && !v.Info.SenderAlt.IsEmpty() {
-		realSender = v.Info.SenderAlt.ToNonAD()
+	// 🌟 2. سمارٹ JID اور LID ایکسٹریکشن
+	targetJID := v.Info.Sender.ToNonAD()
+	isLID := false
+
+	// چیک کریں کہ کیا یہ LID (HiddenUserServer) ہے؟
+	if v.Info.Sender.Server == types.HiddenUserServer || v.Info.Sender.Server == "lid" {
+		isLID = true
+		if !v.Info.SenderAlt.IsEmpty() {
+			targetJID = v.Info.SenderAlt.ToNonAD()
+			fmt.Printf("🔍 [LID BYPASS] Extracted real JID (%s) from SenderAlt!\n", targetJID.User)
+		}
 	}
 
-	// 4. واٹس میو سٹور سے چیک کریں کہ نمبر سیو ہے یا نہیں؟
-	contact, err := client.Store.Contacts.GetContact(context.Background(), realSender)
+	strictJID := types.NewJID(targetJID.User, types.DefaultUserServer)
+
+	// 3. واٹس میو سٹور سے چیک کریں
+	contact, err := client.Store.Contacts.GetContact(context.Background(), strictJID)
 	isSaved := (err == nil && contact.Found && contact.FullName != "")
 	
-	// 🛑 5. ایکشن ٹائم!
+	// 🛑 4. ایکشن ٹائم! (DUAL TRIGGER)
 	if !isSaved {
-		fmt.Printf("🛡️ [ANTI-DM] Triggered! Unsaved DM from %s. Blocking immediately...\n", realSender.User)
+		fmt.Printf("🛡️ [ANTI-DM] Triggered! Unsaved DM. Executing DUAL BLOCK & DELETE...\n")
 		
-		// وارننگ میسج
 		warning := "⚠️ *Silent Nexus Security*\n\nDirect messages from unsaved numbers are not allowed. You are being blocked automatically."
-		client.SendMessage(context.Background(), realSender, &waProto.Message{
+		client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
 			Conversation: proto.String(warning),
 		})
 		
-		time.Sleep(1 * time.Second) // واٹس ایپ کو سانس لینے دیں
+		time.Sleep(1 * time.Second)
 
-		// ⚡ ایکشن 1: بلاک کریں اور ایرر کیچ کریں
-		_, errBlock := client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
-		if errBlock != nil {
-			fmt.Printf("❌ [ANTI-DM ERROR] Failed to BLOCK %s: %v\n", realSender.User, errBlock)
-		} else {
-			fmt.Printf("✅ [ANTI-DM] WhatsApp Server confirmed BLOCK for: %s\n", realSender.User)
-		}
-
-		// ⚡ ایکشن 2: چیٹ ڈیلیٹ کریں (FIXED: MessageKey کے ساتھ)
-		// نوٹ: اگر waCommon پر ایرر آئے تو امپورٹس میں "go.mau.fi/whatsmeow/proto/waCommon" لازمی ایڈ کر لینا
+		// ⚡ فائر 1: اصلی نمبر (strictJID) پر بلاک اور ڈیلیٹ
 		lastMessageKey := &waCommon.MessageKey{
-			RemoteJID: proto.String(v.Info.Chat.String()),
+			RemoteJID: proto.String(strictJID.String()),
 			FromMe:    proto.Bool(v.Info.IsFromMe),
 			ID:        proto.String(v.Info.ID),
 		}
 
-		patch := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, lastMessageKey, true)
-		errPatch := client.SendAppState(context.Background(), patch)
-		
-		if errPatch != nil {
-			fmt.Printf("❌ [ANTI-DM ERROR] Failed to DELETE CHAT for %s: %v\n", realSender.User, errPatch)
+		_, errBlock1 := client.UpdateBlocklist(context.Background(), strictJID, events.BlocklistChangeActionBlock)
+		patch1 := appstate.BuildDeleteChat(strictJID, v.Info.Timestamp, lastMessageKey, true)
+		errPatch1 := client.SendAppState(context.Background(), patch1)
+
+		if errBlock1 == nil && errPatch1 == nil {
+			fmt.Printf("✅ [ANTI-DM] Real JID (%s) Blocked & Chat Deleted!\n", strictJID.User)
 		} else {
-			fmt.Printf("✅ [ANTI-DM] WhatsApp Server confirmed CHAT DELETE for: %s\n", realSender.User)
+			fmt.Printf("❌ [ANTI-DM ERROR] Real JID: Block(%v), Delete(%v)\n", errBlock1, errPatch1)
+		}
+
+		// ⚡ فائر 2: اگر LID (Hidden JID) ہے، تو اس پر بھی بلاک اور ڈیلیٹ ماریں!
+		if isLID {
+			lidJID := v.Info.Sender.ToNonAD()
+			
+			lidMessageKey := &waCommon.MessageKey{
+				RemoteJID: proto.String(lidJID.String()),
+				FromMe:    proto.Bool(v.Info.IsFromMe),
+				ID:        proto.String(v.Info.ID),
+			}
+
+			_, errBlock2 := client.UpdateBlocklist(context.Background(), lidJID, events.BlocklistChangeActionBlock)
+			patch2 := appstate.BuildDeleteChat(lidJID, v.Info.Timestamp, lidMessageKey, true)
+			errPatch2 := client.SendAppState(context.Background(), patch2)
+
+			if errBlock2 == nil && errPatch2 == nil {
+				fmt.Printf("✅ [ANTI-DM] LID (%s) Blocked & Chat Deleted!\n", lidJID.User)
+			} else {
+				fmt.Printf("❌ [ANTI-DM ERROR] LID: Block(%v), Delete(%v)\n", errBlock2, errPatch2)
+			}
 		}
 		
-		return true // سگنل دے دیں کہ میسج ڈراپ کر دیا ہے
-	} else {
-		// اگر واٹس ایپ اسے سیو نمبر مان رہا ہے (یہ لاگ تمہارے پچھلے میسج میں بالکل صحیح کام کر رہا تھا!)
-		// fmt.Printf("ℹ️ [ANTI-DM] Skipped: WhatsApp thinks %s is a SAVED contact.\n", realSender.User)
+		return true // سگنل دیں کہ میسج ڈراپ ہو گیا
 	}
 	
 	return false 
