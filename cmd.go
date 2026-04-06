@@ -1052,8 +1052,11 @@ func handleAntiDeleteRevoke(client *whatsmeow.Client, v *events.Message, setting
 // ==========================================
 // 🛡️ ANTI-CALL LOGIC (100% SQLite / No Redis)
 // ==========================================
+// ==========================================
+// 🛡️ ANTI-CALL LOGIC (Direct DB & Millisecond Drop)
+// ==========================================
 func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings BotSettings) {
-	// 1. گروپ کال یا وائس چیٹ بائی پاس
+	// 1. گروپ کال بائی پاس
 	if c.CallCreator.Server == "g.us" || c.CallCreator.Server == types.GroupServer {
 		return 
 	}
@@ -1061,8 +1064,17 @@ func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings
 	botJID := client.Store.ID.ToNonAD().User
 	callerJID := c.CallCreator.ToNonAD()
 
-	// 2. سیٹنگ اور اونر بائی پاس (صرف settings.AntiCall یوز ہو رہا ہے)
-	if !settings.AntiCall || callerJID.User == botJID || isCallOwner(client, c.CallCreator) { 
+	// 🌟 2. DIRECT DATABASE CHECK (تاکہ getBotSettings کا کوئی بھی بگ اسے روک نہ سکے)
+	isCallEnabled := settings.AntiCall
+	var dbCheck bool
+	errDB := settingsDB.QueryRow("SELECT anti_call FROM bot_settings WHERE jid = ?", botJID).Scan(&dbCheck)
+	if errDB == nil && dbCheck {
+		isCallEnabled = true // اگر ڈیٹا بیس میں آن ہے، تو زبردستی آن کر دو!
+	}
+
+	// اگر آف ہے یا اپنا نمبر ہے تو لاگ پرنٹ کر کے واپس
+	if !isCallEnabled || callerJID.User == botJID { 
+		// fmt.Println("⚠️ [ANTI-CALL] Skipped: Anti-Call is OFF or Caller is Bot.")
 		return 
 	}
 
@@ -1070,27 +1082,49 @@ func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings
 	contact, err := client.Store.Contacts.GetContact(context.Background(), callerJID)
 	isSaved := (err == nil && contact.Found && contact.FullName != "")
 
+	// 🛑 ایکشن ٹائم!
 	if !isSaved {
-		client.RejectCall(context.Background(), c.CallCreator, c.CallID)
+		fmt.Printf("📞 [ANTI-CALL] Triggered! Dropping call from Unsaved Number: %s\n", callerJID.User)
 
-		warning := "⚠️ *Silent Nexus Security*\n\nVoice/Video calls from unsaved numbers are blocked."
+		// ⚡ 1. MILLISECOND DROP (فوراً کال کاٹیں)
+		client.RejectCall(context.Background(), c.CallCreator, c.CallID)
+		client.RejectCall(context.Background(), callerJID, c.CallID) // ڈبل فائر (Safety Backup)
+
+		// ⚡ 2. وارننگ میسج (تاکہ واٹس ایپ کال کٹنے کا پراسیس مکمل کر لے)
+		warning := "⚠️ *Silent Nexus Security*\n\nVoice/Video calls from unsaved numbers are automatically rejected. You are being blocked."
 		client.SendMessage(context.Background(), callerJID, &waProto.Message{
 			Conversation: proto.String(warning),
 		})
 
+		time.Sleep(1 * time.Second) // 1 سیکنڈ کا ڈیلے ضروری ہے ورنہ بلاک کی کمانڈ فیل ہو سکتی ہے
+
+		// ⚡ 3. بلاک اور چیٹ ڈیلیٹ
 		client.UpdateBlocklist(context.Background(), callerJID, events.BlocklistChangeActionBlock)
 		
-		time.Sleep(1 * time.Second)
 		patch := appstate.BuildDeleteChat(callerJID, time.Now(), nil, true)
 		client.SendAppState(context.Background(), patch)
+		
+		fmt.Printf("✅ [ANTI-CALL] Successfully Blocked & Deleted: %s\n", callerJID.User)
+	} else {
+		// اگر واٹس ایپ اسے سیو نمبر مان رہا ہے تو ٹرمینل پر بتا دے گا
+		fmt.Printf("ℹ️ [ANTI-CALL] Skipped: WhatsApp thinks %s is a SAVED contact.\n", callerJID.User)
 	}
 }
 
 // ==========================================
 // 🛡️ ANTI-DM LOGIC (100% SQLite / No Redis)
 // ==========================================
+// ==========================================
+// 🛡️ ANTI-DM LOGIC (Call Bypass Fix)
+// ==========================================
 func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
-	// 1. سیدھا settings.AntiDM سے چیک ہو رہا ہے
+	// 🚫 1. اگر میسج کسی کال کا لاگ (Call Log) ہے تو اینٹی ڈی ایم کو روک دیں
+	// کیونکہ کالز کو Anti-Call خود ہینڈل اور بلاک کرے گا۔
+	if v.Message != nil && v.Message.GetCall() != nil {
+		return false
+	}
+
+	// 2. باقی پرانا فلٹر (گروپ، اونر، نیوز لیٹر)
 	if !settings.AntiDM || v.Info.IsGroup || v.Info.IsFromMe || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer || isOwner(client, v) {
 		return false
 	}
@@ -1100,7 +1134,7 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 		realSender = v.Info.SenderAlt.ToNonAD()
 	}
 
-	// 2. واٹس میو سٹور چیک
+	// 3. واٹس میو سٹور چیک اور بلاکنگ
 	contact, err := client.Store.Contacts.GetContact(context.Background(), realSender)
 	isSaved := (err == nil && contact.Found && contact.FullName != "")
 	
