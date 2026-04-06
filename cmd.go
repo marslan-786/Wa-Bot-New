@@ -25,7 +25,6 @@ import (
 // فائل کے اوپر امپورٹس میں "encoding/json" لازمی ایڈ کر لینا
 
 func EventHandler(client *whatsmeow.Client, evt interface{}) {
-	// 🛡️ CRASH PROTECTION (پورے ہینڈلر کو کریش ہونے سے بچائے گا)
 	defer func() {
 		if r := recover(); r != nil {
 			botID := "unknown"
@@ -38,42 +37,43 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 
 	switch v := evt.(type) {
 	
-	// 📞 1. کالز کو سیدھا ہینڈلر میں پکڑیں
 	case *events.CallOffer:
-		settings := getBotSettings(client)
-		go handleAntiCallLogic(client, v, settings)
+		go handleAntiCallLogic(client, v, getBotSettings(client))
 
-	// ✉️ 2. میسجز کی پروسیسنگ
 	case *events.Message:
 		
-		// 🛑 1. REVOKE CATCHER (Anti-Delete)
+		// 🛑 1. ANTI-DELETE REVOKE CATCHER
 		if v.Message.GetProtocolMessage() != nil && v.Message.GetProtocolMessage().GetType() == waProto.ProtocolMessage_REVOKE {
 			go handleAntiDeleteRevoke(client, v)
-			return // یہیں سے مڑ جائیں، نیچے نہ جائیں!
+			return // یہیں سے مڑ جائیں!
 		}
 
-		// 🛡️ 2. پرائیویٹ چیٹس کے سیکیورٹی فلٹرز (Anti-DM, Cache, Anti-VV)
+		// 🛡️ 2. ANTI-DM GATEKEEPER (صرف پرائیویٹ چیٹس کے لیے)
 		if !v.Info.IsGroup {
-			// ⚡ Anti-DM Gatekeeper: اگر بندہ بلاک ہو گیا تو پروسیسنگ یہیں روک دو!
 			settings := getBotSettings(client)
+			
+			// ⚡ اگر Anti-DM نے بلاک مار دیا ہے، تو پروسیسنگ فوراً یہیں روک دو!
 			if handleAntiDMWatch(client, v, settings) {
 				return 
 			}
 
-			// اگر سیف ہے تو کیشے اور ویو ونس چیک کرو
+			// اگر بلاک نہیں ہوا (یعنی سیو نمبر ہے) تو کیشے اور ویو ونس چیک کرو
+			go handleAntiDeleteSave(client, v)
+			go handleAntiVVLogic(client, v)
+		} else {
+			// اگر گروپ ہے تو سیدھا کیشے اور ویو ونس چیک کرو
 			go handleAntiDeleteSave(client, v)
 			go handleAntiVVLogic(client, v)
 		}
 
-		// ⏱️ 3. ٹائم فلٹر: پرانے میسجز اگنور کریں
+		// ⏱️ 3. TIME FILTER
 		if time.Since(v.Info.Timestamp) > 60*time.Second { 
 			return 
 		}
 
-		// 🚀 4. مین پروسیسر میں بھیجیں
+		// 🚀 4. MAIN PROCESSOR
 		go processMessageAsync(client, v)
 		
-	// 🟢 3. بوٹ کنیکٹ ہونے کا لاگ
 	case *events.Connected:
 		if client.Store != nil && client.Store.ID != nil {
 			botCleanID := getCleanID(client.Store.ID.User)
