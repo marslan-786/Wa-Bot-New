@@ -777,7 +777,7 @@ func handleAntiDeleteLogic(client *whatsmeow.Client, v *events.Message, settings
 	if protoMsg := v.Message.GetProtocolMessage(); protoMsg != nil && protoMsg.GetType() == waProto.ProtocolMessage_REVOKE {
 		if !settings.PrivateAntiDelete { return }
 
-		targetMsgID := protoMsg.GetKey().GetId()
+		targetMsgID := protoMsg.GetKey().GetID()
 		senderJID := protoMsg.GetKey().GetParticipant()
 		if senderJID == "" { senderJID = v.Info.Sender.String() }
 

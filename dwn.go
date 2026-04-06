@@ -17,6 +17,7 @@ import (
 	"bytes"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/types"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
