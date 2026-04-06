@@ -36,115 +36,112 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 	}
 }
 
-// ==========================================
-// 🚀 ASYNC COMMAND PROCESSOR
-// ==========================================
-// cmd.go میں processMessageAsync کے اندر تبدیلیاں:
 func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
+	// 🛡️ 1. CRASH PROTECTION (پورے فنکشن کے لیے)
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("⚠️ [CRASH PREVENTED]: %v\n", r)
-			react(client, v.Info.Chat, v.Info.ID, "❌")
+			fmt.Printf("⚠️ [VIP CRASH PREVENTED]: %v\n", r)
 		}
 	}()
-	
-	if v.Info.IsFromMe { return }
 
-	// 🔥 1. سیشن کی سیٹنگز لائیں (ایک ہی بار)
+	// نِل چیک (Safe Check)
+	if v.Message == nil { return }
+
+	// 🛠️ 2. بنیادی معلومات اور سیٹنگز (صرف ایک بار)
 	settings := getBotSettings(client)
+	botJID := client.Store.ID.ToNonAD().User
+	
+	// 👑 اونر چیک (آپ کا اپنا نمبر یا وہ نمبر جس پر بوٹ چل رہا ہے)
+	userIsOwner := isOwner(client, v) || v.Info.IsFromMe
+	isGroup := v.Info.IsGroup
 
-	// 🛡️ ANTI-DM WATCHER (یہ سب سے اوپر ہونا چاہیے!)
-	// اگر اس فنکشن نے True ریٹرن کیا (یعنی بندہ بلاک ہو گیا)، تو یہیں سے واپس مڑ جاؤ
-	if handleAntiDMWatch(client, v, settings) {
-		return 
+	// 🛡️ 3. SECURITY WATCHERS (صرف غیر متعلقہ لوگوں کے لیے)
+	if !userIsOwner {
+		// Anti-DM (اگر بلاک ہوا تو یہیں سے فنکشن ختم ہو جائے گا)
+		if handleAntiDMWatch(client, v, settings) { return }
+
+		// Anti-Delete اور Anti-VV (بیک گراؤنڈ میں چلائیں تاکہ کمانڈز نہ رکیں)
+		go handleAntiDeleteLogic(client, v, settings)
+		go handleAntiVVLogic(client, v, settings)
 	}
 
-	// 🛡️ باقی BACKGROUND WATCHERS (انہیں یہیں پروسیس کروا دیں)
-	handleAntiDeleteLogic(client, v, settings)
-	handleAntiVVLogic(client, v, settings)
-
-	// 📝 میسج ٹیکسٹ نکالنے کا محفوظ (Safe) طریقہ
+	// 📝 4. میسج ٹیکسٹ نکالنا (سپر سیف طریقہ)
 	body := ""
 	if v.Message.GetConversation() != "" {
 		body = v.Message.GetConversation()
-	} else if v.Message.GetExtendedTextMessage() != nil && v.Message.GetExtendedTextMessage().Text != nil {
+	} else if v.Message.GetExtendedTextMessage() != nil {
 		body = v.Message.GetExtendedTextMessage().GetText()
+	} else if v.Message.GetImageMessage() != nil {
+		body = v.Message.GetImageMessage().GetCaption()
+	} else if v.Message.GetVideoMessage() != nil {
+		body = v.Message.GetVideoMessage().GetCaption()
 	}
 	
-	// 🌟 bodyClean کو ڈیکلیئر (:=) کریں اور لوئر کیس (lowercase) کریں
 	bodyClean := strings.ToLower(strings.TrimSpace(body))
-	if bodyClean == "" { return }
-
-	// 🔥 2. چیک کریں کہ یوزر اونر ہے یا نہیں اور گروپ ہے یا پرائیویٹ
-	userIsOwner := isOwner(client, v)
-	isGroup := strings.Contains(v.Info.Chat.String(), "@g.us")
-    
-    // (اس کے نیچے تمہارا باقی کا کوڈ اور سوئچ کیس آ جائے گا)
 
 	// ==========================================
-	// 🌟 AUTO FEATURES ENGINE (Run before commands)
+	// ⚡ 5. AUTO FEATURES ENGINE (Non-Blocking)
 	// ==========================================
-	if v.Info.Chat.User == "status" { 
-		if settings.AutoStatus {
-			// FIX: context.Background() ایڈ کیا گیا ہے
-			client.MarkRead(context.Background(), []types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
-		}
-		if settings.StatusReact {
-			react(client, v.Info.Chat, v.Info.ID, "💚") 
-		}
+	
+	// 🟢 Status / Broadcast Logic
+	if v.Info.Chat.User == "status" {
+		go func() {
+			if settings.AutoStatus {
+				client.MarkRead(context.Background(), []types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
+			}
+			if settings.StatusReact {
+				react(client, v.Info.Chat, v.Info.ID, "💚")
+			}
+		}()
 		return 
 	}
 
-	if settings.AutoRead {
-		// FIX: context.Background() ایڈ کیا گیا ہے
-		client.MarkRead(context.Background(), []types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
-	}
-
-
-		// 3. Auto React (ملٹیپل ایموجیز کے ساتھ)
-	if settings.AutoReact && !isGroup && !v.Info.IsFromMe {
-		// 🎭 یہاں تم اپنی مرضی کے جتنے مرضی ایموجیز ڈال سکتے ہو
-		emojis := []string{"❤️", "🔥", "🚀", "👍", "💯", "😎", "😂", "✨", "🎉", "💖", "🥰", "🫡", "👀", "🌟"}
-		
-		// 🎲 ان میں سے کوئی ایک رینڈم ایموجی سلیکٹ کرو
-		randomEmoji := emojis[rand.Intn(len(emojis))]
-		
-		react(client, v.Info.Chat, v.Info.ID, randomEmoji)
-	}
+	// 📖 Auto Read & Auto React (بیک گراؤنڈ میں)
+	go func() {
+		if settings.AutoRead {
+			client.MarkRead(context.Background(), []types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
+		}
+		if settings.AutoReact && !isGroup && !v.Info.IsFromMe && !userIsOwner {
+			emojis := []string{"❤️", "🔥", "🚀", "👍", "💯", "😎", "😂", "✨", "🎉", "💖"}
+			randomEmoji := emojis[rand.Intn(len(emojis))]
+			react(client, v.Info.Chat, v.Info.ID, randomEmoji)
+		}
+	}()
 
 	// ==========================================
-
-	// 🔥 3. موڈ کے حساب سے فلٹر کریں
-	if !userIsOwner { // اونر پر موڈ کی پابندی نہیں ہوتی
-		if settings.Mode == "private" && isGroup {
-			return // گروپس میں بلاک
-		}
+	// 🚦 6. MODE & PERMISSION FILTERS
+	// ==========================================
+	if !userIsOwner {
+		if settings.Mode == "private" && isGroup { return }
 		if settings.Mode == "admin" && isGroup {
+			// ایڈمن چیک لاجک (بیک گراؤنڈ میں نہیں ہو سکتی کیونکہ رزلٹ چاہیے)
 			groupInfo, err := client.GetGroupInfo(context.Background(), v.Info.Chat)
 			if err != nil { return }
 			isAdmin := false
-			for _, participant := range groupInfo.Participants {
-				// ToNonAD() یوز کر کے کلین آئی ڈی میچ کریں گے
-				if participant.JID.User == v.Info.Sender.ToNonAD().User && (participant.IsAdmin || participant.IsSuperAdmin) {
+			for _, p := range groupInfo.Participants {
+				if p.JID.User == v.Info.Sender.ToNonAD().User && (p.IsAdmin || p.IsSuperAdmin) {
 					isAdmin = true
 					break
 				}
 			}
-			if !isAdmin { return } // اگر ایڈمن نہیں تو اگنور کرو
+			if !isAdmin { return }
 		}
 	}
 
-	// مینو ریپلائی چیک
-	extMsg := v.Message.GetExtendedTextMessage()
-	if extMsg != nil && extMsg.ContextInfo != nil && extMsg.ContextInfo.StanzaID != nil {
-		qID := *extMsg.ContextInfo.StanzaID
-		if HandleMenuReplies(client, v, bodyClean, qID) { return }
+	// 7. مینو ریپلائی چیک
+	if v.Message.GetExtendedTextMessage() != nil && v.Message.GetExtendedTextMessage().ContextInfo != nil {
+		qID := v.Message.GetExtendedTextMessage().ContextInfo.GetStanzaID()
+		if qID != "" {
+			if HandleMenuReplies(client, v, bodyClean, qID) { return }
+		}
 	}
 
-	// 🔥 4. ڈائنامک پریفکس چیک کریں
-	if !strings.HasPrefix(bodyClean, settings.Prefix) {
-		return
-	}
+	// ==========================================
+	// 🚀 8. COMMAND DISPATCHER
+	// ==========================================
+	
+	// پریفکس چیک (اگر اونر ہے تو بغیر پریفکس کے بھی کمانڈز چل سکتی ہیں، لیکن ہم پریفکس برقرار رکھیں گے)
+	if !strings.HasPrefix(bodyClean, settings.Prefix) { return }
 
 	msgWithoutPrefix := strings.TrimPrefix(bodyClean, settings.Prefix)
 	words := strings.Fields(msgWithoutPrefix)
@@ -153,9 +150,6 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	cmd := strings.ToLower(words[0])
 	fullArgs := strings.TrimSpace(strings.Join(words[1:], " "))
 
-	// ==========================================
-	// 🎯 COMMAND SWITCH ENGINE
-	// ==========================================
 	switch cmd {
     
 	// 👑 OWNER COMMANDS (With Specific Reactions)
@@ -1000,21 +994,23 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 }
 
 func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings BotSettings) {
-    if !settings.AntiCall || isCallOwner(client, c.CallCreator) { return }
+	botJID := client.Store.ID.ToNonAD().User
+	callerJID := c.CallCreator.ToNonAD().User
 
-	// 🌟 FIX: context.Background() ایڈ کر دیا ہے
-	contact, err := client.Store.Contacts.GetContact(context.Background(), c.CallCreator)
-	if err == nil && contact.Found && contact.FullName != "" { return }
+	// اونر کو چھوڑ دیں
+	if !settings.AntiCall || callerJID == botJID { return }
 
-	// 🌟 FIX: RejectCall میں پہلا آرگیومنٹ Context ہے
-	client.RejectCall(context.Background(), c.CallCreator, c.CallID)
+	// اگر نمبر ڈی بی میں سیو نہیں ہے
+	if !isSavedInDB(botJID, callerJID) {
+		// 📞 کال ریجیکٹ کریں
+		client.RejectCall(context.Background(), c.CallCreator, c.CallID)
 
-	warning := "⚠️ *Anti-Call System*\n\nUnsaved numbers are not allowed to call. You are being blocked."
-	client.SendMessage(context.Background(), c.CallCreator, &waProto.Message{
-		Conversation: proto.String(warning),
-	})
-
-	client.UpdateBlocklist(context.Background(), c.CallCreator, events.BlocklistChangeActionBlock)
-	patch := appstate.BuildDeleteChat(c.CallCreator, time.Now(), nil, true)
-	client.SendAppState(context.Background(), patch)
+		// 🚫 بلاک اور میسج
+		msg := "⚠️ *Security Alert*\nUnsaved calls are blocked."
+		client.SendMessage(context.Background(), c.CallCreator, &waProto.Message{Conversation: &msg})
+		client.UpdateBlocklist(context.Background(), c.CallCreator, events.BlocklistChangeActionBlock)
+		
+		patch := appstate.BuildDeleteChat(c.CallCreator, time.Now(), nil, true)
+		client.SendAppState(context.Background(), patch)
+	}
 }
