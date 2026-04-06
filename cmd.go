@@ -92,7 +92,6 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	if v.Message == nil { return }
 
 	// 🚫 سب سے پہلا اور سخت فلٹر: واٹس ایپ چینل (Newsletter) کو نظر انداز کریں!
-	// اگر میسج چینل سے آیا ہے تو یہیں سے واپس، تاکہ بوٹ فریز نہ ہو۔
 	if v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer {
 		return 
 	}
@@ -103,9 +102,8 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	userIsOwner := isOwner(client, v) || v.Info.IsFromMe
 	isGroup := v.Info.IsGroup
 
-	// 📝 میسج ٹیکسٹ نکالنا... (یہاں سے آپ کا باقی کوڈ ویسے ہی چلے گا)
+	// 📝 میسج ٹیکسٹ نکالنا...
 	body := ""
-    // ...
 	if v.Message.GetConversation() != "" {
 		body = v.Message.GetConversation()
 	} else if v.Message.GetExtendedTextMessage() != nil {
@@ -116,7 +114,25 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		body = v.Message.GetVideoMessage().GetCaption()
 	}
 	
-	bodyClean := strings.ToLower(strings.TrimSpace(body))
+	// 🔥 1. اصل میسج (جس میں کیپیٹل لیٹرز محفوظ ہیں)
+	rawBody := strings.TrimSpace(body)
+	
+	// ⚠️ 2. یہ آپ کا پرانا طریقہ ہے (اسے رہنے دیا ہے تاکہ پرانی کمانڈز نہ ٹوٹیں)
+	bodyClean := strings.ToLower(rawBody)
+
+	// 🎯 3. جادو یہاں ہے: میسج کو 2 حصوں میں توڑ لیا (کمانڈ اور لنک)
+	command := ""
+	rawArgs := ""
+	
+	parts := strings.SplitN(rawBody, " ", 2) // سپیس کی بنیاد پر دو ٹکڑے کیے
+	if len(parts) > 0 {
+		// کمانڈ کو ہم نے چھوٹا کر دیا (تاکہ .tt ہو یا .TT، دونوں چلیں)
+		command = strings.ToLower(parts[0]) 
+	}
+	if len(parts) > 1 {
+		// آگے والا حصہ (جیسے ٹک ٹاک کا لنک) بالکل اپنی اصلی حالت میں محفوظ ہے!
+		rawArgs = strings.TrimSpace(parts[1]) 
+	}
 
 	// ==========================================
 	// ⚡ 5. AUTO FEATURES ENGINE (Non-Blocking)
