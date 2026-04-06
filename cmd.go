@@ -629,24 +629,35 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
 	})
 }
 
-func react(client *whatsmeow.Client, chat types.JID, msgID string, reaction string) {
-	// اگر چیٹ LID (@lid) ہے یا نیوز لیٹر (@newsletter) ہے، تو ری ایکٹ مت کرو!
-	if chat.Server == types.HiddenUserServer || chat.Server == types.NewsletterServer {
-		return // یہاں سے خاموشی سے واپس آ جاؤ تاکہ 479 ایرر نہ آئے
-	}
-	
-	client.SendMessage(context.Background(), chat, &waProto.Message{
-		ReactionMessage: &waProto.ReactionMessage{
-			Key: &waProto.MessageKey{
-				RemoteJID: proto.String(chat.String()),
-				FromMe:    proto.Bool(false),
-				ID:        proto.String(msgID),
-			},
-			Text: proto.String(reaction),
-		},
-	})
-}
+func react(client *whatsmeow.Client, chat types.JID, msgID types.MessageID, emoji string) {
+	// 🚀 Goroutine: یہ فوراً الگ تھریڈ میں چلا جائے گا اور مین کوڈ کو نہیں روکے گا
+	go func() {
+		// 🛡️ Panic Recovery: اگر ری ایکشن میں کوئی ایرر آئے تو بوٹ کریش نہ ہو
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("⚠️ React Panic: %v\n", r)
+			}
+		}()
 
+		// یہ میسج اب بیک گراؤنڈ میں جائے گا
+		_, err := client.SendMessage(context.Background(), chat, &waProto.Message{
+			ReactionMessage: &waProto.ReactionMessage{
+				Key: &waProto.MessageKey{
+					RemoteJID: proto.String(chat.String()),
+					ID:        proto.String(string(msgID)),
+					FromMe:    proto.Bool(false),
+				},
+				Text:              proto.String(emoji),
+				SenderTimestampMS: proto.Int64(time.Now().UnixMilli()),
+			},
+		})
+
+		// اگر آپ ایرر دیکھنا چاہتے ہیں (Optional)
+		if err != nil {
+			fmt.Printf("❌ React Failed: %v\n", err)
+		}
+	}()
+}
 
 func replyMessage(client *whatsmeow.Client, v *events.Message, text string) string {
 	resp, err := client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
