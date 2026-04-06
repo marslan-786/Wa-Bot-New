@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-//	"time"
+	"time"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
@@ -33,8 +33,6 @@ func handleAntiDeleteToggle(client *whatsmeow.Client, v *events.Message, args st
 	botJID := client.Store.ID.ToNonAD().User
 	chatJID := v.Info.Chat.ToNonAD().String()
 	
-	// 🌟 سمارٹ لاجک: اگر ON کر رہے ہیں، تو پہلے باقی سب گروپس سے OFF کر دیں
-	// تاکہ صرف اسی ایک گروپ میں میسجز آئیں
 	if state {
 		settingsDB.Exec("UPDATE group_settings SET anti_delete = 0 WHERE bot_jid = ?", botJID)
 	}
@@ -75,15 +73,13 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 // 📥 CACHE SAVER: (ONLY Saves Private Messages)
 // ==========================================
 func handleAntiDeleteSave(client *whatsmeow.Client, v *events.Message) {
-	// 🚫 اگر میسج گروپ کا ہے، یا بوٹ کا اپنا ہے، تو فوراً واپس! (سٹوریج بچائیں)
 	if v.Info.IsGroup || v.Message == nil || v.Info.IsFromMe { return }
 
 	botJID := client.Store.ID.ToNonAD().User
 
-	// چیک کریں کہ کیا کسی بھی گروپ میں اینٹی ڈیلیٹ ON ہے؟
 	var logGroup string
 	err := settingsDB.QueryRow("SELECT chat_jid FROM group_settings WHERE bot_jid = ? AND anti_delete = 1 LIMIT 1", botJID).Scan(&logGroup)
-	if err != nil || logGroup == "" { return } // اگر کوئی لاگ گروپ نہیں ہے تو سیو نہ کریں
+	if err != nil || logGroup == "" { return }
 
 	msgBytes, err := proto.Marshal(v.Message)
 	if err == nil {
@@ -93,15 +89,13 @@ func handleAntiDeleteSave(client *whatsmeow.Client, v *events.Message) {
 }
 
 // ==========================================
-// 🚀 REVOKE CATCHER: (Forwards to Log Group)
+// 🚀 REVOKE CATCHER: (Forwards to Log Group with Time)
 // ==========================================
 func handleAntiDeleteRevoke(client *whatsmeow.Client, v *events.Message) {
-	// 🚫 صرف پرائیویٹ چیٹس کا ڈیلیٹ کیچ کریں گے
 	if v.Info.IsGroup || v.Info.IsFromMe { return }
 
 	botJID := client.Store.ID.ToNonAD().User
 	
-	// 🎯 ڈیٹا بیس سے وہ گروپ نکالیں جہاں اینٹی ڈیلیٹ ON ہے
 	var logGroup string
 	err := settingsDB.QueryRow("SELECT chat_jid FROM group_settings WHERE bot_jid = ? AND anti_delete = 1 LIMIT 1", botJID).Scan(&logGroup)
 	if err != nil || logGroup == "" { return }
@@ -111,20 +105,29 @@ func handleAntiDeleteRevoke(client *whatsmeow.Client, v *events.Message) {
 	senderJID := v.Info.Sender.ToNonAD().User
 
 	var rawMsg []byte
-	err = settingsDB.QueryRow("SELECT msg_content FROM message_cache WHERE msg_id = ?", deletedMsgID).Scan(&rawMsg)
-	if err != nil { return } // کیشے میں نہیں ملا
+	var msgTimestamp int64
+	err = settingsDB.QueryRow("SELECT msg_content, timestamp FROM message_cache WHERE msg_id = ?", deletedMsgID).Scan(&rawMsg, &msgTimestamp)
+	if err != nil { return }
 
 	var originalMsg waProto.Message
 	proto.Unmarshal(rawMsg, &originalMsg)
+
+	// 🕒 پاکستانی ٹائم کی سیٹنگ (PKT)
+	loc, _ := time.LoadLocation("Asia/Karachi")
+	sentTime := time.Unix(msgTimestamp, 0).In(loc).Format("02 Jan 2006, 03:04 PM")
+	deletedTime := time.Now().In(loc).Format("02 Jan 2006, 03:04 PM")
 
 	cleanSender := strings.Split(senderJID, "@")[0]
 	warningText := fmt.Sprintf(`❖ ── ✦ 🚫 𝗣𝗥𝗜𝗩𝗔𝗧𝗘 𝗔𝗡𝗧𝗜-𝗗𝗘𝗟𝗘𝗧𝗘 🚫 ✦ ── ❖
 
 👤 *Sender:* @%s
-🗑️ _Attempted to delete this private message!_
-╰──────────────────────╯`, cleanSender)
+📅 *Sent At:* %s
+🗑️ *Deleted At:* %s
 
-	// 1. لاگ گروپ میں الرٹ بھیجیں
+_Attempted to delete this private message!_
+╰──────────────────────╯`, cleanSender, sentTime, deletedTime)
+
+	// الرٹ بھیجیں
 	client.SendMessage(context.Background(), targetJID, &waProto.Message{
 		ExtendedTextMessage: &waProto.ExtendedTextMessage{
 			Text: proto.String(warningText),
@@ -132,20 +135,18 @@ func handleAntiDeleteRevoke(client *whatsmeow.Client, v *events.Message) {
 		},
 	})
 	
-	// 2. اصلی میسج لاگ گروپ میں فارورڈ کریں
+	// اصل میسج بھیجیں
 	client.SendMessage(context.Background(), targetJID, &originalMsg)
 }
 
 // ==========================================
-// 👁️ ANTI-VV: VIEW-ONCE EXTRACTOR (To Log Group)
+// 👁️ ANTI-VV: VIEW-ONCE EXTRACTOR (With Time)
 // ==========================================
 func handleAntiVVLogic(client *whatsmeow.Client, v *events.Message) {
-	// 🚫 صرف پرائیویٹ چیٹس کے View Once کیچ کریں گے
 	if v.Info.IsGroup || v.Message == nil || v.Info.IsFromMe { return }
 
 	botJID := client.Store.ID.ToNonAD().User
 	
-	// 🎯 وہ گروپ نکالیں جہاں Anti-VV ON ہے
 	var logGroup string
 	err := settingsDB.QueryRow("SELECT chat_jid FROM group_settings WHERE bot_jid = ? AND anti_vv = 1 LIMIT 1", botJID).Scan(&logGroup)
 	if err != nil || logGroup == "" { return }
@@ -191,11 +192,16 @@ func handleAntiVVLogic(client *whatsmeow.Client, v *events.Message) {
 	up, err := client.Upload(ctx, data, mType)
 	if err != nil { return }
 
+	// 🕒 پاکستانی ٹائم (PKT)
+	loc, _ := time.LoadLocation("Asia/Karachi")
+	recvTime := time.Now().In(loc).Format("02 Jan 2006, 03:04 PM")
+
 	cleanSender := strings.Split(v.Info.Sender.String(), "@")[0]
 	caption := fmt.Sprintf(`❖ ── ✦ 👁️ 𝗣𝗥𝗜𝗩𝗔𝗧𝗘 𝗔𝗡𝗧𝗜-𝗩𝗜𝗘𝗪 𝗢𝗡𝗖𝗘 ✦ ── ❖
 
 👤 *Sender:* @%s
-╰──────────────────────╯`, cleanSender)
+🕒 *Time:* %s
+╰──────────────────────╯`, cleanSender, recvTime)
 
 	var finalMsg waProto.Message
 

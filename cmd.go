@@ -38,50 +38,42 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 
 	switch v := evt.(type) {
 	
-	// ==========================================
-	// 📞 1. ANTI-CALL: کالز کو گیٹ پر ہی پکڑیں
-	// ==========================================
+	// 📞 1. کالز کو سیدھا ہینڈلر میں پکڑیں
 	case *events.CallOffer:
 		settings := getBotSettings(client)
 		go handleAntiCallLogic(client, v, settings)
 
-	// ==========================================
-	// ✉️ 2. MESSAGES: سارے سیکیورٹی فلٹرز
-	// ==========================================
+	// ✉️ 2. میسجز کی پروسیسنگ
 	case *events.Message:
 		
-		// 🛑 A. ANTI-DELETE (Revoke Catcher): اگر کوئی میسج ڈیلیٹ کر رہا ہے تو فوراً پکڑیں
+		// 🛑 1. REVOKE CATCHER (Anti-Delete)
 		if v.Message.GetProtocolMessage() != nil && v.Message.GetProtocolMessage().GetType() == waProto.ProtocolMessage_REVOKE {
 			go handleAntiDeleteRevoke(client, v)
-			return // یہیں سے مڑ جائیں، اسے آگے پروسیس نہ کریں!
+			return // یہیں سے مڑ جائیں، نیچے نہ جائیں!
 		}
 
-// 💾 B. ANTI-DELETE (Private Cache Saver) & 👁️ ANTI-VV 
-		if !v.Info.IsGroup { // 👈 اب یہ !IsGroup (Private) کے لیے چلے گا
+		// 🛡️ 2. پرائیویٹ چیٹس کے سیکیورٹی فلٹرز (Anti-DM, Cache, Anti-VV)
+		if !v.Info.IsGroup {
+			// ⚡ Anti-DM Gatekeeper: اگر بندہ بلاک ہو گیا تو پروسیسنگ یہیں روک دو!
+			settings := getBotSettings(client)
+			if handleAntiDMWatch(client, v, settings) {
+				return 
+			}
+
+			// اگر سیف ہے تو کیشے اور ویو ونس چیک کرو
 			go handleAntiDeleteSave(client, v)
-			go handleAntiVVLogic(client, v) 
+			go handleAntiVVLogic(client, v)
 		}
 
-		// ⏱️ TIME FILTER: پرانے میسجز (60 سیکنڈ سے پرانے) یہیں ڈراپ کر دیں
+		// ⏱️ 3. ٹائم فلٹر: پرانے میسجز اگنور کریں
 		if time.Since(v.Info.Timestamp) > 60*time.Second { 
 			return 
 		}
 
-		// 🛡️ C. ANTI-DM (Gatekeeper for Private Chats)
-		// سیٹنگز نکالیں اور پرائیویٹ چیٹس پر اینٹی ڈی ایم چیک کریں
-		settings := getBotSettings(client)
-		if !v.Info.IsGroup {
-			if handleAntiDMWatch(client, v, settings) {
-				return // 🛑 اگر Anti-DM نے اس ان سیوڈ نمبر کو بلاک کر دیا ہے، تو پروسیس یہیں روک دیں!
-			}
-		}
-
-		// 🚀 D. COMMAND PROCESSOR: سب سیکیورٹی فلٹرز پاس کرنے کے بعد مین انجن میں بھیجیں
+		// 🚀 4. مین پروسیسر میں بھیجیں
 		go processMessageAsync(client, v)
 		
-	// ==========================================
-	// 🟢 3. CONNECTION LOG: ٹرمینل کی خوبصورتی کے لیے
-	// ==========================================
+	// 🟢 3. بوٹ کنیکٹ ہونے کا لاگ
 	case *events.Connected:
 		if client.Store != nil && client.Store.ID != nil {
 			botCleanID := getCleanID(client.Store.ID.User)
