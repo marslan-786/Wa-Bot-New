@@ -912,10 +912,13 @@ func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings
 // ==========================================
 // 🛡️ ANTI-DM LOGIC (Double Trigger: Block & Delete for JID + LID)
 // ==========================================
+// ==========================================
+// 🛡️ ANTI-DM LOGIC (User's Proven Logic + SQLite)
+// ==========================================
 func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
 	botJID := client.Store.ID.ToNonAD().User
 
-	// 1. DIRECT DATABASE CHECK
+	// 1. DIRECT DATABASE CHECK (SQLite)
 	isEnabled := settings.AntiDM
 	var dbCheck bool
 	errDB := settingsDB.QueryRow("SELECT anti_dm FROM bot_settings WHERE jid = ?", botJID).Scan(&dbCheck)
@@ -923,80 +926,75 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 		isEnabled = true 
 	}
 
-	if !isEnabled || v.Info.IsFromMe || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer || isOwner(client, v) {
+	// 2. بیسک فلٹرز
+	if !isEnabled || v.Info.IsGroup || v.Info.IsFromMe || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer || isOwner(client, v) {
 		return false
 	}
 
-	// 🌟 2. سمارٹ JID اور LID ایکسٹریکشن
-	targetJID := v.Info.Sender.ToNonAD()
-	isLID := false
-
-	// چیک کریں کہ کیا یہ LID (HiddenUserServer) ہے؟
-	if v.Info.Sender.Server == types.HiddenUserServer || v.Info.Sender.Server == "lid" {
-		isLID = true
+	// =========================================================
+	// 🟢 JID EXTRACTION LOGIC (تمہاری پرانی اور کامیاب لاجک)
+	// =========================================================
+	var realSender types.JID
+	if v.Info.Sender.Server == types.HiddenUserServer {
 		if !v.Info.SenderAlt.IsEmpty() {
-			targetJID = v.Info.SenderAlt.ToNonAD()
-			fmt.Printf("🔍 [LID BYPASS] Extracted real JID (%s) from SenderAlt!\n", targetJID.User)
+			realSender = v.Info.SenderAlt.ToNonAD() 
+		} else {
+			realSender = v.Info.Sender.ToNonAD()
 		}
+	} else {
+		realSender = v.Info.Sender.ToNonAD()
 	}
 
-	strictJID := types.NewJID(targetJID.User, types.DefaultUserServer)
-
-	// 3. واٹس میو سٹور سے چیک کریں
-	contact, err := client.Store.Contacts.GetContact(context.Background(), strictJID)
-	isSaved := (err == nil && contact.Found && contact.FullName != "")
+	// 4. کانٹیکٹ چیک کریں
+	contact, err := client.Store.Contacts.GetContact(context.Background(), realSender)
+	isSaved := err == nil && contact.Found && contact.FullName != ""
 	
-	// 🛑 4. ایکشن ٹائم! (DUAL TRIGGER)
+	// 5. اگر نمبر سیو نہیں ہے (Unknown Number)
 	if !isSaved {
-		fmt.Printf("🛡️ [ANTI-DM] Triggered! Unsaved DM. Executing DUAL BLOCK & DELETE...\n")
+		fmt.Printf("🛡️ [ANTI-DM] TRIGGERED [Bot: %s]: Unsaved number -> %s\n", botJID, realSender.User)
 		
 		warning := "⚠️ *Silent Nexus Security*\n\nDirect messages from unsaved numbers are not allowed. You are being blocked automatically."
 		client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
 			Conversation: proto.String(warning),
 		})
 		
-		time.Sleep(1 * time.Second)
+		time.Sleep(1 * time.Second) // وارننگ جانے کا ویٹ
 
-		// ⚡ فائر 1: اصلی نمبر (strictJID) پر بلاک اور ڈیلیٹ
+		// 🛑 بلاک کرنے کی کوشش (Dual Try - تمہاری لاجک)
+		_, errBlock1 := client.UpdateBlocklist(context.Background(), v.Info.Sender.ToNonAD(), events.BlocklistChangeActionBlock)
+		if errBlock1 != nil {
+			_, errBlock2 := client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
+			if errBlock2 == nil {
+				fmt.Printf("✅ [ANTI-DM] Successfully blocked real number: %s\n", realSender.String())
+			} else {
+				fmt.Printf("❌ [ANTI-DM ERROR] Block failed: %v\n", errBlock2)
+			}
+		} else {
+			fmt.Printf("✅ [ANTI-DM] Successfully blocked LID: %s\n", v.Info.Sender.String())
+		}
+
+		// 🛑 چیٹ ڈیلیٹ کریں (Dual Patch - تمہاری لاجک)
 		lastMessageKey := &waCommon.MessageKey{
-			RemoteJID: proto.String(strictJID.String()),
+			RemoteJID: proto.String(v.Info.Chat.String()),
 			FromMe:    proto.Bool(v.Info.IsFromMe),
 			ID:        proto.String(v.Info.ID),
 		}
 
-		_, errBlock1 := client.UpdateBlocklist(context.Background(), strictJID, events.BlocklistChangeActionBlock)
-		patch1 := appstate.BuildDeleteChat(strictJID, v.Info.Timestamp, lastMessageKey, true)
-		errPatch1 := client.SendAppState(context.Background(), patch1)
-
-		if errBlock1 == nil && errPatch1 == nil {
-			fmt.Printf("✅ [ANTI-DM] Real JID (%s) Blocked & Chat Deleted!\n", strictJID.User)
-		} else {
-			fmt.Printf("❌ [ANTI-DM ERROR] Real JID: Block(%v), Delete(%v)\n", errBlock1, errPatch1)
-		}
-
-		// ⚡ فائر 2: اگر LID (Hidden JID) ہے، تو اس پر بھی بلاک اور ڈیلیٹ ماریں!
-		if isLID {
-			lidJID := v.Info.Sender.ToNonAD()
-			
-			lidMessageKey := &waCommon.MessageKey{
-				RemoteJID: proto.String(lidJID.String()),
-				FromMe:    proto.Bool(v.Info.IsFromMe),
-				ID:        proto.String(v.Info.ID),
-			}
-
-			_, errBlock2 := client.UpdateBlocklist(context.Background(), lidJID, events.BlocklistChangeActionBlock)
-			patch2 := appstate.BuildDeleteChat(lidJID, v.Info.Timestamp, lidMessageKey, true)
-			errPatch2 := client.SendAppState(context.Background(), patch2)
-
-			if errBlock2 == nil && errPatch2 == nil {
-				fmt.Printf("✅ [ANTI-DM] LID (%s) Blocked & Chat Deleted!\n", lidJID.User)
-			} else {
-				fmt.Printf("❌ [ANTI-DM ERROR] LID: Block(%v), Delete(%v)\n", errBlock2, errPatch2)
-			}
-		}
+		patchInfo1 := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, lastMessageKey, true)
+		errPatch1 := client.SendAppState(context.Background(), patchInfo1)
 		
-		return true // سگنل دیں کہ میسج ڈراپ ہو گیا
+		// اصلی نمبر کے لیے بھی ڈیلیٹ کی کمانڈ بھیجیں (بغیر میسج آئی ڈی کے)
+		patchInfo2 := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, nil, true)
+		errPatch2 := client.SendAppState(context.Background(), patchInfo2)
+		
+		if errPatch1 == nil || errPatch2 == nil {
+			fmt.Printf("✅ [ANTI-DM] Chat DELETED from WhatsApp screen for: %s\n", realSender.User)
+		} else {
+			fmt.Printf("❌ [ANTI-DM ERROR] Delete failed. Patch1: %v | Patch2: %v\n", errPatch1, errPatch2)
+		}
+
+		return true 
 	}
-	
-	return false 
+
+	return false
 }
