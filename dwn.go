@@ -75,7 +75,7 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 			animating = false
 		}
 	}
-	defer stopAnim() // تاکہ اگر فنکشن کریش ہو یا ایرر آئے تو اینیمیشن رک جائے
+	defer stopAnim() 
 
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
@@ -94,32 +94,64 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	}()
 	// ==========================================
 
-	// 🔄 FALLBACK LOGIC: اگر API کام نہ کرے تو یہ فنکشن چلے گا
+	// 🔄 FALLBACK LOGIC
 	executeFallback := func() {
-		stopAnim() // پہلے اینیمیشن روکو
+		stopAnim() 
 		mode := "video"
 		if isAudio { mode = "audio" }
-		// ڈاؤنلوڈ اینڈ سینڈ والے انٹرنل سسٹم کو کال کر دو
 		downloadAndSend(client, v, targetUrl, mode)
 	}
 
 	httpClient := &http.Client{Timeout: 5 * time.Minute}
 
-	// 🔥 صرف یہ تبدیلی ہے: شارٹ لنک کے اسپیشل کریکٹرز کو API کے لیے محفوظ بنانا
-	encodedUrl := url.QueryEscape(targetUrl)
-	apiUrl := fmt.Sprintf("https://silent-yt-dwn.up.railway.app/api/download?url=%s&resolution=%s", encodedUrl, resolution)
+	// 🔥 ڈائریکٹ اور کچا لنک
+	apiUrl := fmt.Sprintf("https://silent-yt-dwn.up.railway.app/api/download?url=%s&resolution=%s", targetUrl, resolution)
 	
 	resp, err := httpClient.Get(apiUrl)
-	if err != nil { executeFallback(); return }
+	if err != nil { 
+		fmt.Printf("\n❌❌ [API NETWORK ERROR]: %v\n", err)
+		executeFallback() 
+		return 
+	}
 	defer resp.Body.Close()
 
-	var apiRes APIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiRes); err != nil || !apiRes.Success || apiRes.DownloadURL == "" {
-		executeFallback(); return
+	// ----------------------------------------------------
+	// 🔍 API کا کچا چٹھا (Raw Body) پڑھنا
+	// ----------------------------------------------------
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("\n❌❌ [API BODY READ ERROR]: %v\n", err)
+		executeFallback()
+		return
 	}
 
+	var apiRes APIResponse
+	err = json.Unmarshal(bodyBytes, &apiRes)
+
+	// اگر API نے رسپانس غلط دیا، یا Success false ہے، یا ڈونلوڈ لنک نہیں ہے
+	if err != nil || !apiRes.Success || apiRes.DownloadURL == "" {
+		fmt.Printf("\n======================================================\n")
+		fmt.Printf("⚠️ [API FAILED - PRINTING RAW RESPONSE (KACHA CHITHA)] ⚠️\n")
+		fmt.Printf("👉 Hit URL: %s\n", apiUrl)
+		if err != nil {
+			fmt.Printf("👉 JSON Parse Error: %v\n", err)
+		}
+		// 🔥 یہ رہا وہ کچا چٹھا جو API نے پیچھے سے بھیجا ہے!
+		fmt.Printf("👉 Raw Response: %s\n", string(bodyBytes)) 
+		fmt.Printf("🔄 Now triggering executeFallback()...\n")
+		fmt.Printf("======================================================\n\n")
+		
+		executeFallback()
+		return
+	}
+
+	// اگر یہاں تک آ گیا تو مطلب API پاس ہو گئی ہے
 	fileResp, err := httpClient.Get(apiRes.DownloadURL)
-	if err != nil { executeFallback(); return }
+	if err != nil { 
+		fmt.Printf("\n❌ [FILE DOWNLOAD ERROR]: %v\n", err)
+		executeFallback() 
+		return 
+	}
 	defer fileResp.Body.Close()
 
 	ext := ".mp4"
@@ -145,7 +177,6 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	fileSize := fileInfo.Size()
 	var filesToSend []string
 
-	// 🔥 ڈاؤن لوڈ مکمل! اب اینیمیشن کو روک دیں تاکہ اپلوڈ والے ایموجیز لگ سکیں
 	stopAnim() 
 
 	if fileSize > int64(MaxWhatsAppSize) && !isAudio {
@@ -171,6 +202,7 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 }
+
 
 
 func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mode string, optionalFormat ...string) {
@@ -205,16 +237,23 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 	}()
 	// ==========================================
 
-	isAudio := false
-	if mode == "audio" {
-		isAudio = true
-	}
+	isAudio := mode == "audio"
 
-	// 1. ڈائریکٹ اپنا انٹرنل اسکریپر فنکشن کال کرو
+	// 1. ڈائریکٹ اپنا انٹرنل اسکریپر فنکشن کال کرو (بغیر کسی تبدیلی کے)
+	fmt.Printf("\n📥 [INTERNAL SCRAPER] Sending raw link: %s\n", targetUrl) // کچا لنک پرنٹ کریں
+	
 	title, downloadURL, err := extractVidsSaveURL(targetUrl, mode)
+	
 	if err != nil || downloadURL == "" {
-		stopAnim() // اینیمیشن روکیں
-		fmt.Printf("❌ [EXTRACTION ERROR]: %v\n", err)
+		stopAnim()
+		// 🔴 اگر فیل ہوا تو یہاں پورا کچا چٹھا پرنٹ ہوگا
+		fmt.Printf("\n========================================\n")
+		fmt.Printf("❌ [EXTRACTION ERROR IN downloadAndSend]\n")
+		fmt.Printf("👉 Input URL: %s\n", targetUrl)
+		fmt.Printf("👉 Error: %v\n", err)
+		fmt.Printf("👉 Result URL: '%s'\n", downloadURL)
+		fmt.Printf("========================================\n\n")
+
 		replyMessage(client, v, "❌ *Download Failed:* System could not extract this link.")
 		react(client, v.Info.Chat, v.Info.ID, "❌")
 		return
@@ -223,9 +262,11 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 	httpClient := &http.Client{Timeout: 5 * time.Minute}
 
 	// 2. فائل ڈاؤنلوڈ کرنا شروع کریں
+	fmt.Printf("🌐 [STREAMING] Downloading from: %s\n", downloadURL)
 	fileResp, err := httpClient.Get(downloadURL)
 	if err != nil { 
 		stopAnim()
+		fmt.Printf("❌ [STREAM ERROR]: %v\n", err)
 		replyMessage(client, v, "❌ *Error:* Failed to stream media from server.")
 		react(client, v.Info.Chat, v.Info.ID, "❌")
 		return 
@@ -245,6 +286,7 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 	if err != nil { 
 		os.Remove(tempFileName)
 		stopAnim()
+		fmt.Printf("❌ [SAVE ERROR]: %v\n", err)
 		react(client, v.Info.Chat, v.Info.ID, "❌")
 		return 
 	}
@@ -256,6 +298,8 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 	if err != nil { stopAnim(); react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 	
 	fileSize := fileInfo.Size()
+	fmt.Printf("✅ [DOWNLOADED] File Size: %.2f MB\n", float64(fileSize)/(1024*1024))
+
 	var filesToSend []string
 
 	// 🔥 ڈاؤن لوڈ مکمل! اینیمیشن روک دیں
@@ -284,7 +328,9 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 	}
 
 	react(client, v.Info.Chat, v.Info.ID, "✅")
+	fmt.Printf("🎉 [COMPLETED] Successfully sent to user.\n")
 }
+
 
 // ==========================================
 // 📤 3. CORE UPLOAD & SEND FUNCTION
