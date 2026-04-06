@@ -105,11 +105,19 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		if settings.AutoRead {
 			client.MarkRead(context.Background(), []types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
 		}
-		if settings.AutoReact && !isGroup && !v.Info.IsFromMe && !userIsOwner {
-			emojis := []string{"❤️", "🔥", "🚀", "👍", "💯", "😎", "😂", "✨", "🎉", "💖"}
-			randomEmoji := emojis[rand.Intn(len(emojis))]
-			react(client, v.Info.Chat, v.Info.ID, randomEmoji)
-		}
+
+        if settings.AutoReact {
+    
+
+            if v.Info.Chat.Server == "newsletter" {
+                return
+            }
+
+            emojis := []string{"❤️", "🔥", "🚀", "👍", "💯", "😎", "😂", "✨", "🎉", "💖"}
+            randomEmoji := emojis[rand.Intn(len(emojis))]
+            react(client, v.Info.Chat, v.Info.ID, randomEmoji)
+        }
+
 	}()
 
 	// ==========================================

@@ -80,7 +80,7 @@ func RunAllSessions() {
 		// 🌟 FIX: Goroutine کو لوپ کے اندر رکھا گیا ہے
 		// ==========================================
 		// ہم client کو ایز اے پیرامیٹر (c) پاس کر رہے ہیں تاکہ میموری مکس نہ ہو
-		go func(c *whatsmeow.Client) {
+	    /*	go func(c *whatsmeow.Client) {
 			// 1. بوٹ کنیکٹ ہوتے ہی فوراً ایک بار لسٹ اپڈیٹ کریں
 			if c.IsConnected() {
 				syncBotContacts(c)
@@ -93,7 +93,7 @@ func RunAllSessions() {
 					syncBotContacts(c)
 				}
 			}
-		}(client) // 👈 یہاں سے کرنٹ کلائنٹ اندر پاس ہو رہا ہے
+		}(client)   */ // 👈 یہاں سے کرنٹ کلائنٹ اندر پاس ہو رہا ہے
 	}
 }
 
