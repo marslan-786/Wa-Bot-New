@@ -917,26 +917,47 @@ func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings
 // ==========================================
 // 🛡️ ANTI-DM LOGIC (Clean & Direct)
 // ==========================================
+// ==========================================
+// 🛡️ ANTI-DM LOGIC (Direct DB Check & Debugging)
+// ==========================================
 func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
-	// 1. بیسک فلٹرز (اگر اینٹی ڈی ایم آف ہے، یا اپنا میسج ہے، یا نیوز لیٹر ہے، یا اونر ہے تو چھوڑ دو)
-	if !settings.AntiDM || v.Info.IsFromMe || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer || isOwner(client, v) {
+	botJID := client.Store.ID.ToNonAD().User
+
+	// 🌟 1. DIRECT DATABASE CHECK (بالکل اینٹی کال کی طرح)
+	isEnabled := settings.AntiDM
+	var dbCheck bool
+	errDB := settingsDB.QueryRow("SELECT anti_dm FROM bot_settings WHERE jid = ?", botJID).Scan(&dbCheck)
+	if errDB == nil && dbCheck {
+		isEnabled = true // اگر ڈیٹا بیس میں ON ہے، تو زبردستی ON کر دو!
+	}
+
+	// 2. بیسک بائی پاس فلٹرز
+	if !isEnabled || v.Info.IsFromMe || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer || isOwner(client, v) {
 		return false
 	}
 
-	// 2. اصلی نمبر نکالیں
+	// 3. اصلی نمبر نکالیں
 	realSender := v.Info.Sender.ToNonAD()
 	if v.Info.Sender.Server == types.HiddenUserServer && !v.Info.SenderAlt.IsEmpty() {
 		realSender = v.Info.SenderAlt.ToNonAD()
 	}
 
-	// 3. سیدھا واٹس میو سٹور سے چیک کریں کہ کیا نمبر سیو ہے؟
+	// 4. واٹس میو سٹور سے چیک کریں کہ نمبر سیو ہے یا نہیں؟
 	contact, err := client.Store.Contacts.GetContact(context.Background(), realSender)
 	isSaved := (err == nil && contact.Found && contact.FullName != "")
 	
-	// 4. ایکشن ٹائم! (اگر سیو نہیں ہے تو سیدھا بلاک)
+	// 🛑 5. ایکشن ٹائم!
 	if !isSaved {
-		fmt.Printf("🛡️ [ANTI-DM] Unsaved DM received from %s. Blocking immediately!\n", realSender.User)
+		fmt.Printf("🛡️ [ANTI-DM] Triggered! Unsaved DM from %s. Blocking immediately...\n", realSender.User)
 		
+		// وارننگ میسج (تاکہ واٹس ایپ بلاک کی کمانڈ کو صحیح پروسیس کر لے)
+		warning := "⚠️ *Silent Nexus Security*\n\nDirect messages from unsaved numbers are not allowed. You are being blocked automatically."
+		client.SendMessage(context.Background(), realSender, &waProto.Message{
+			Conversation: proto.String(warning),
+		})
+		
+		time.Sleep(1 * time.Second) // 1 سیکنڈ کا ڈیلے بہت ضروری ہے!
+
 		// بلاک کریں
 		client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
 
@@ -945,7 +966,10 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 		client.SendAppState(context.Background(), patch)
 		
 		fmt.Printf("✅ [ANTI-DM] Successfully Blocked & Deleted chat for: %s\n", realSender.User)
-		return true // سگنل دے دیں کہ میسج ڈراپ کر دیا ہے
+		return true // سگنل دے دیں کہ میسج ڈراپ کر دیا ہے، آگے نہ بھیجو
+	} else {
+		// اگر واٹس ایپ اسے سیو نمبر مان رہا ہے تو ٹرمینل پر بتا دے گا
+		fmt.Printf("ℹ️ [ANTI-DM] Skipped: WhatsApp thinks %s is a SAVED contact.\n", realSender.User)
 	}
 	
 	return false // اگر سیو ہے تو میسج کو اندر آنے دیں
