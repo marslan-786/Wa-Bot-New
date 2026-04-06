@@ -86,6 +86,17 @@ func initSettingsDB() {
 	);`
 	settingsDB.Exec(createCacheQuery)
 
+// 5. گروپ سیٹنگز کے لیے نیا ٹیبل (صرف ان گروپس کا ڈیٹا جن میں سیٹنگز آن ہیں)
+	createGroupTableQuery := `
+	CREATE TABLE IF NOT EXISTS group_settings (
+		bot_jid TEXT,
+		chat_jid TEXT,
+		anti_delete BOOLEAN DEFAULT 0,
+		anti_vv BOOLEAN DEFAULT 0,
+		PRIMARY KEY (bot_jid, chat_jid)
+	);`
+	settingsDB.Exec(createGroupTableQuery)
+
 	// 4. آٹو کلین اپ (24 گھنٹے پرانے میسجز ڈیلیٹ کرنے کے لیے)
 	go func() {
 		for {
@@ -96,6 +107,24 @@ func initSettingsDB() {
 	}()
 	
 	fmt.Println("✅ Database Initialized & Migrated Safely!")
+}
+
+
+type GroupSettings struct {
+	AntiDelete bool
+	AntiVV     bool
+}
+
+func getGroupSettings(botJID string, chatJID string) GroupSettings {
+	var settings GroupSettings
+	err := settingsDB.QueryRow("SELECT anti_delete, anti_vv FROM group_settings WHERE bot_jid = ? AND chat_jid = ?", botJID, chatJID).Scan(&settings.AntiDelete, &settings.AntiVV)
+	
+	// اگر اس گروپ کی کوئی سیٹنگ نہیں ہے تو نیا ریکارڈ بنا دیں (ڈیفالٹ 0/Off کے ساتھ)
+	if err == sql.ErrNoRows {
+		settingsDB.Exec("INSERT INTO group_settings (bot_jid, chat_jid) VALUES (?, ?)", botJID, chatJID)
+		return GroupSettings{}
+	}
+	return settings
 }
 
 func getBotSettings(client *whatsmeow.Client) BotSettings {
