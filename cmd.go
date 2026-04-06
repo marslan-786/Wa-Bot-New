@@ -8,7 +8,7 @@ import (
 	"math/rand"
 	"time"
 //	"encoding/json"
-    "bytes"
+//    "bytes"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
@@ -50,6 +50,7 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	
 	if v.Info.IsFromMe { return }
 
+	// 🔥 1. سیشن کی سیٹنگز لائیں (ایک ہی بار)
 	settings := getBotSettings(client)
 
 	// 🛡️ ANTI-DM WATCHER (یہ سب سے اوپر ہونا چاہیے!)
@@ -58,23 +59,27 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		return 
 	}
 
-	body := ""
-	if v.Message.Conversation != nil {
-		body = *v.Message.Conversation
-	} else if v.Message.ExtendedTextMessage != nil && v.Message.ExtendedTextMessage.Text != nil {
-		body = *v.Message.ExtendedTextMessage.Text
-	}
-	bodyClean = strings.TrimSpace(body)
-	if bodyClean == "" { return }
-
-	// 🔥 1. سیشن کی سیٹنگز لائیں (نئے کلین طریقے سے)
-	settings := getBotSettings(client)
+	// 🛡️ باقی BACKGROUND WATCHERS (انہیں یہیں پروسیس کروا دیں)
 	handleAntiDeleteLogic(client, v, settings)
 	handleAntiVVLogic(client, v, settings)
 
-	// 🔥 2. چیک کریں کہ یوزر اونر ہے یا نہیں
+	// 📝 میسج ٹیکسٹ نکالنے کا محفوظ (Safe) طریقہ
+	body := ""
+	if v.Message.GetConversation() != "" {
+		body = v.Message.GetConversation()
+	} else if v.Message.GetExtendedTextMessage() != nil && v.Message.GetExtendedTextMessage().Text != nil {
+		body = v.Message.GetExtendedTextMessage().GetText()
+	}
+	
+	// 🌟 bodyClean کو ڈیکلیئر (:=) کریں اور لوئر کیس (lowercase) کریں
+	bodyClean := strings.ToLower(strings.TrimSpace(body))
+	if bodyClean == "" { return }
+
+	// 🔥 2. چیک کریں کہ یوزر اونر ہے یا نہیں اور گروپ ہے یا پرائیویٹ
 	userIsOwner := isOwner(client, v)
 	isGroup := strings.Contains(v.Info.Chat.String(), "@g.us")
+    
+    // (اس کے نیچے تمہارا باقی کا کوڈ اور سوئچ کیس آ جائے گا)
 
 	// ==========================================
 	// 🌟 AUTO FEATURES ENGINE (Run before commands)
