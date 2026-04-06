@@ -33,29 +33,46 @@ type BotSettings struct {
 
 func initSettingsDB() {
 	var err error
+	// فارن کیز (Foreign Keys) کے ساتھ ڈیٹا بیس اوپن کریں
 	settingsDB, err = sql.Open("sqlite3", "file:./data/settings.db?_foreign_keys=on")
 	if err != nil {
 		log.Fatal("❌ Settings DB Error:", err)
 	}
 
+	// 1. سب سے پہلے بیسک ٹیبل بنائیں (صرف بنیادی کالمز کے ساتھ)
 	createTableQuery := `
 	CREATE TABLE IF NOT EXISTS bot_settings (
 		jid TEXT PRIMARY KEY,
 		prefix TEXT DEFAULT '.',
 		mode TEXT DEFAULT 'public',
-		uptime_start INTEGER,
-		always_online BOOLEAN DEFAULT 0,
-		auto_read BOOLEAN DEFAULT 0,
-		auto_react BOOLEAN DEFAULT 0,
-		auto_status BOOLEAN DEFAULT 0,
-		status_react BOOLEAN DEFAULT 0,
-		private_antidelete BOOLEAN DEFAULT 0
-		anti_vv BOOLEAN DEFAULT 0
-		
+		uptime_start INTEGER
 	);`
 	settingsDB.Exec(createTableQuery)
 
-	// 🛡️ ANTI-DELETE CACHE TABLE
+	// 🛠️ SMART MIGRATION HELPER (یہ چیک کرے گا کہ کالم ہے یا نہیں)
+	addColumnSafe := func(tableName, colName, colDef string) {
+		query := fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s'", tableName, colName)
+		var count int
+		err := settingsDB.QueryRow(query).Scan(&count)
+		// اگر کالم موجود نہیں ہے (count == 0)، تبھی ALTER ٹیبل چلائے گا
+		if err == nil && count == 0 {
+			alterQuery := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", tableName, colName, colDef)
+			settingsDB.Exec(alterQuery)
+			fmt.Printf("🔄 DB Migration: Added '%s' to '%s'\n", colName, tableName)
+		}
+	}
+
+	// 2. اب اپنے سارے ایکسٹرا اور نئے فیچرز یہاں ایڈ کریں (یہ پرانے ڈیٹا بیس کو کریش نہیں ہونے دے گا)
+	addColumnSafe("bot_settings", "always_online", "BOOLEAN DEFAULT 0")
+	addColumnSafe("bot_settings", "auto_read", "BOOLEAN DEFAULT 0")
+	addColumnSafe("bot_settings", "auto_react", "BOOLEAN DEFAULT 0")
+	addColumnSafe("bot_settings", "auto_status", "BOOLEAN DEFAULT 0")
+	addColumnSafe("bot_settings", "status_react", "BOOLEAN DEFAULT 0")
+	addColumnSafe("bot_settings", "private_antidelete", "BOOLEAN DEFAULT 0")
+	addColumnSafe("bot_settings", "anti_vv", "BOOLEAN DEFAULT 0")
+	addColumnSafe("bot_settings", "anti_dm", "BOOLEAN DEFAULT 0")
+
+	// 3. اینٹی ڈیلیٹ کے لیے میسج کیش ٹیبل
 	createCacheQuery := `
 	CREATE TABLE IF NOT EXISTS message_cache (
 		msg_id TEXT PRIMARY KEY,
@@ -65,15 +82,16 @@ func initSettingsDB() {
 	);`
 	settingsDB.Exec(createCacheQuery)
 
+	// 4. آٹو کلین اپ (24 گھنٹے پرانے میسجز ڈیلیٹ کرنے کے لیے)
 	go func() {
 		for {
 			time.Sleep(1 * time.Hour)
 			oneDayAgo := time.Now().Unix() - (24 * 60 * 60)
 			settingsDB.Exec("DELETE FROM message_cache WHERE timestamp < ?", oneDayAgo)
-		// settingsDB.Exec کے نیچے یہ لائن ایڈ کریں یا ALTER کمانڈ چلائیں
-            settingsDB.Exec("ALTER TABLE bot_settings ADD COLUMN anti_dm BOOLEAN DEFAULT 0;")
 		}
 	}()
+	
+	fmt.Println("✅ Database Initialized & Migrated Safely!")
 }
 
 func getBotSettings(client *whatsmeow.Client) BotSettings {
