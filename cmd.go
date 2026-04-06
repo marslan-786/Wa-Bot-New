@@ -15,6 +15,7 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"go.mau.fi/whatsmeow/appstate"
 )
 
 // ==========================================
@@ -25,29 +26,12 @@ import (
 func EventHandler(client *whatsmeow.Client, evt interface{}) {
 	switch v := evt.(type) {
 	case *events.Message:
-		// 1. ٹائم آؤٹ چیک (پرانے میسجز اگنور کریں)
-		if time.Since(v.Info.Timestamp) > 60*time.Second {
-			return
-		}
-
-		// 🔍 ANTI-DM DEBUGGER: 100% Raw JSON Data
-		settings := getBotSettings(client)
-		if settings.AntiDM {
-			fmt.Println("\n--- [📥 RAW JSON DATA START] ---")
-			
-			// v.Info کے پورے سٹرکچر کو اوریجنل JSON فارمیٹ میں کنورٹ کریں
-			rawJSON, err := json.MarshalIndent(v.Info, "", "  ")
-			if err == nil {
-				fmt.Println(string(rawJSON))
-			} else {
-				fmt.Println("JSON Error:", err)
-			}
-			
-			fmt.Println("--- [📥 RAW JSON DATA END] ---\n")
-		}
-
-		// 🔥 اصل گیم چینجر
+		if time.Since(v.Info.Timestamp) > 60*time.Second { return }
 		go processMessageAsync(client, v)
+
+	case *events.CallOffer: // 📞 کال ڈیٹیکٹ کرنے کے لیے
+		settings := getBotSettings(client)
+		go handleAntiCallLogic(client, v, settings)
 	}
 }
 
@@ -62,6 +46,16 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 			react(client, v.Info.Chat, v.Info.ID, "❌")
 		}
 	}()
+	
+	if v.Info.IsFromMe { return }
+
+	settings := getBotSettings(client)
+
+	// 🛡️ ANTI-DM WATCHER (یہ سب سے اوپر ہونا چاہیے!)
+	// اگر اس فنکشن نے True ریٹرن کیا (یعنی بندہ بلاک ہو گیا)، تو یہیں سے واپس مڑ جاؤ
+	if handleAntiDMWatch(client, v, settings) {
+		return 
+	}
 
 	body := ""
 	if v.Message.Conversation != nil {
@@ -364,9 +358,13 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		go handleRVC(client, v)
 		
 	// 🚫 SECURITY COMMANDS
-	case "antidm":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		go handleAntiDMToggle(client, v, fullArgs)
+	case "anticall":
+        if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+        go handleToggleSettings(client, v, "anti_call", fullArgs)
+
+    case "antidm":
+        if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+        go handleToggleSettings(client, v, "anti_dm", fullArgs)
 			
 	case "fb", "facebook", "ig", "insta", "instagram", "tw", "x", "twitter", "pin", "pinterest", "threads", "snap", "snapchat", "reddit", "dm", "dailymotion", "vimeo", "rumble", "bilibili", "douyin", "kwai", "bitchute", "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp", "imgur", "giphy", "flickr", "9gag", "ifunny":
 	    react(client, v.Info.Chat, v.Info.ID, "🪩")
@@ -976,12 +974,118 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 	replyMessage(client, v, fmt.Sprintf("✅ *Anti View-Once* is now *%s*", strings.ToUpper(args)))
 }
 
-func handleAntiDMToggle(client *whatsmeow.Client, v *events.Message, args string) {
-	args = strings.ToLower(strings.TrimSpace(args))
-	state := (args == "on")
-	cleanJID := client.Store.ID.ToNonAD().User
-	settingsDB.Exec("UPDATE bot_settings SET anti_dm = ? WHERE jid = ?", state, cleanJID)
+// ==========================================
+// 🛡️ ANTI-DM SYSTEM (Block & Delete Unsaved)
+// ==========================================
+func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
+	// اگر Anti-DM آف ہے، یا گروپ ہے، یا اپنا میسج ہے، یا اونر خود ہے -> تو کچھ مت کرو
+	if !settings.AntiDM || v.Info.IsGroup || v.Info.IsFromMe || isOwner(client, v) {
+		return false
+	}
+
+	// 🟢 JID EXTRACTION LOGIC (LID سے اصلی نمبر نکالنے کا ہیک)
+	var realSender types.JID
+	if v.Info.Sender.Server == types.HiddenUserServer {
+		if !v.Info.SenderAlt.IsEmpty() {
+			realSender = v.Info.SenderAlt.ToNonAD() 
+		} else {
+			realSender = v.Info.Sender.ToNonAD()
+		}
+	} else {
+		realSender = v.Info.Sender.ToNonAD()
+	}
+
+	// 📇 کانٹیکٹ چیک کریں (Store سے)
+	contact, err := client.Store.Contacts.GetContact(realSender)
+	isSaved := (err == nil && contact.Found && contact.FullName != "")
 	
-	react(client, v.Info.Chat, v.Info.ID, "✅")
-	replyMessage(client, v, "🛡️ *Anti-DM Debug Mode* is now " + strings.ToUpper(args))
+	// 🛑 اگر نمبر سیو نہیں ہے (Unknown Number)
+	if !isSaved {
+		// 1. بلاک کرنے کی کوشش (Dual Try - بزنس اور نارمل دونوں کے لیے)
+		_, err := client.UpdateBlocklist(context.Background(), v.Info.Sender.ToNonAD(), events.BlocklistChangeActionBlock)
+		if err != nil {
+			client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
+		}
+
+		// 2. چیٹ ڈیلیٹ کریں (اسکرین سے غائب کرنے کے لیے)
+		lastMessageKey := &waProto.MessageKey{
+			RemoteJID: proto.String(v.Info.Chat.String()),
+			FromMe:    proto.Bool(v.Info.IsFromMe),
+			ID:        proto.String(v.Info.ID),
+		}
+
+		patchInfo1 := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, lastMessageKey, true)
+		client.SendAppState(context.Background(), patchInfo1)
+		
+		// اصلی نمبر کے لیے بھی ڈیلیٹ کی کمانڈ بھیجیں تاکہ کوئی کسر نہ رہے
+		patchInfo2 := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, nil, true)
+		client.SendAppState(context.Background(), patchInfo2)
+		
+		// 3. اونر کو پرائیویٹ وارننگ بھیجیں (Mentions کے ساتھ)
+		ownerJID := client.Store.ID.ToNonAD()
+		warningText := fmt.Sprintf("❖ ── ✦ 🛡️ 𝗔𝗡𝗧𝗜-𝗗𝗠 ✦ ── ❖\n\n_Successfully Blocked & Deleted chat of an unsaved number!_\n\n👤 *Blocked User:* @%s", realSender.User)
+		
+		client.SendMessage(context.Background(), ownerJID, &waProto.Message{
+			ExtendedTextMessage: &waProto.ExtendedTextMessage{
+				Text: proto.String(warningText),
+				ContextInfo: &waProto.ContextInfo{ MentionedJID: []string{realSender.String()} },
+			},
+		})
+
+		return true // ریٹرن True کا مطلب ہے کہ ہم نے بندے کو اڑا دیا ہے، اب مزید پروسیسنگ روک دو
+	}
+
+	return false
+}
+
+// ==========================================
+// 🛡️ ANTI-DM & ANTI-CALL LOGIC
+// ==========================================
+
+func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
+	if !settings.AntiDM || v.Info.IsGroup || v.Info.IsFromMe || isOwner(client, v) {
+		return false
+	}
+
+	realSender := v.Info.Sender.ToNonAD()
+	contact, err := client.Store.Contacts.GetContact(realSender)
+	isSaved := (err == nil && contact.Found && contact.FullName != "")
+	
+	if !isSaved {
+		// 1. وارننگ میسج (صرف اگلے بندے کو جائے گا)
+		warning := "⚠️ *Silent Nexus Security*\n\nUnsaved number detected! Automatic block and chat delete initiated. Your efforts are useless now."
+		client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
+			Conversation: proto.String(warning),
+		})
+
+		// 2. بلاک اور چیٹ ڈیلیٹ (خاموشی سے)
+		client.UpdateBlocklist(context.Background(), v.Info.Sender.ToNonAD(), events.BlocklistChangeActionBlock)
+		
+		patch := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, nil, true)
+		client.SendAppState(context.Background(), patch)
+
+		return true 
+	}
+	return false
+}
+
+func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings BotSettings) {
+	if !settings.AntiCall || isOwnerJID(c.CallCreator) { return }
+
+	contact, err := client.Store.Contacts.GetContact(c.CallCreator)
+	if err == nil && contact.Found && contact.FullName != "" { return }
+
+	// 1. کال مسترد کریں
+	client.RejectCall(c.CallCreator, c.CallID)
+
+	// 2. وارننگ بھیجیں
+	warning := "⚠️ *Anti-Call System*\n\nUnsaved numbers are not allowed to call. You are being blocked automatically."
+	client.SendMessage(context.Background(), c.CallCreator, &waProto.Message{
+		Conversation: proto.String(warning),
+	})
+
+	// 3. بلاک اور چیٹ صفایا
+	client.UpdateBlocklist(context.Background(), c.CallCreator, events.BlocklistChangeActionBlock)
+	patch := appstate.BuildDeleteChat(c.CallCreator, time.Now(), nil, true)
+	client.SendAppState(context.Background(), patch)
 }
