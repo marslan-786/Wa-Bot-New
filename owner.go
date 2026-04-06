@@ -127,13 +127,30 @@ func getBotSettings(client *whatsmeow.Client) BotSettings {
 }
 
 // 👑 OWNER CHECKER FUNCTION
+// ==========================================
+// 👑 DYNAMIC OWNER CHECK (Messages)
+// ==========================================
 func isOwner(client *whatsmeow.Client, v *events.Message) bool {
-	if v.Info.IsFromMe {
-		return true
+	// بوٹ کا اپنا اصلی نمبر نکالیں
+	botJID := client.Store.ID.ToNonAD().User 
+	
+	// سینڈر کا اصلی نمبر نکالنے کی لاجک (LID Bypass)
+	realSender := v.Info.Sender.ToNonAD().User
+	if v.Info.Sender.Server == types.HiddenUserServer && !v.Info.SenderAlt.IsEmpty() {
+		realSender = v.Info.SenderAlt.ToNonAD().User
 	}
-	masterOwner := "923017552805" // 👈 یہاں اپنا اصل نمبر ڈال لینا
-	senderNum := v.Info.Sender.ToNonAD().User
-	return senderNum == masterOwner
+
+	// اگر سینڈر کا نمبر اور بوٹ کا نمبر سیم ہے، تو وہ اونر ہے!
+	return realSender == botJID
+}
+
+// ==========================================
+// 👑 DYNAMIC OWNER CHECK (Calls)
+// ==========================================
+// کالز کے ایونٹ میں v.Info نہیں ہوتا، اس لیے اس کا فنکشن الگ سے بنانا پڑتا ہے
+func isCallOwner(client *whatsmeow.Client, callerJID types.JID) bool {
+	botJID := client.Store.ID.ToNonAD().User
+	return callerJID.ToNonAD().User == botJID
 }
 
 // ==========================================

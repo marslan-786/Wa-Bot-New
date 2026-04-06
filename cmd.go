@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"time"
 //	"encoding/json"
+    "bytes"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
@@ -63,7 +64,7 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	} else if v.Message.ExtendedTextMessage != nil && v.Message.ExtendedTextMessage.Text != nil {
 		body = *v.Message.ExtendedTextMessage.Text
 	}
-	bodyClean := strings.TrimSpace(body)
+	bodyClean = strings.TrimSpace(body)
 	if bodyClean == "" { return }
 
 	// 🔥 1. سیشن کی سیٹنگز لائیں (نئے کلین طریقے سے)
@@ -984,19 +985,17 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 	}
 
 	realSender := v.Info.Sender.ToNonAD()
-	contact, err := client.Store.Contacts.GetContact(realSender)
+	// 🌟 FIX: context.Background() کا اضافہ کیا گیا ہے
+	contact, err := client.Store.Contacts.GetContact(context.Background(), realSender)
 	isSaved := (err == nil && contact.Found && contact.FullName != "")
 	
 	if !isSaved {
-		// 1. وارننگ میسج (صرف اگلے بندے کو جائے گا)
-		warning := "⚠️ *Silent Nexus Security*\n\nUnsaved number detected! Automatic block and chat delete initiated. Your efforts are useless now."
+		warning := "⚠️ *Silent Nexus Security*\n\nUnsaved number detected! Automatic block initiated."
 		client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
 			Conversation: proto.String(warning),
 		})
 
-		// 2. بلاک اور چیٹ ڈیلیٹ (خاموشی سے)
 		client.UpdateBlocklist(context.Background(), v.Info.Sender.ToNonAD(), events.BlocklistChangeActionBlock)
-		
 		patch := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, nil, true)
 		client.SendAppState(context.Background(), patch)
 
@@ -1006,21 +1005,20 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 }
 
 func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings BotSettings) {
-	if !settings.AntiCall || isOwnerJID(c.CallCreator) { return }
+    if !settings.AntiCall || isCallOwner(client, c.CallCreator) { return }
 
-	contact, err := client.Store.Contacts.GetContact(c.CallCreator)
+	// 🌟 FIX: context.Background() ایڈ کر دیا ہے
+	contact, err := client.Store.Contacts.GetContact(context.Background(), c.CallCreator)
 	if err == nil && contact.Found && contact.FullName != "" { return }
 
-	// 1. کال مسترد کریں
-	client.RejectCall(c.CallCreator, c.CallID)
+	// 🌟 FIX: RejectCall میں پہلا آرگیومنٹ Context ہے
+	client.RejectCall(context.Background(), c.CallCreator, c.CallID)
 
-	// 2. وارننگ بھیجیں
-	warning := "⚠️ *Anti-Call System*\n\nUnsaved numbers are not allowed to call. You are being blocked automatically."
+	warning := "⚠️ *Anti-Call System*\n\nUnsaved numbers are not allowed to call. You are being blocked."
 	client.SendMessage(context.Background(), c.CallCreator, &waProto.Message{
 		Conversation: proto.String(warning),
 	})
 
-	// 3. بلاک اور چیٹ صفایا
 	client.UpdateBlocklist(context.Background(), c.CallCreator, events.BlocklistChangeActionBlock)
 	patch := appstate.BuildDeleteChat(c.CallCreator, time.Now(), nil, true)
 	client.SendAppState(context.Background(), patch)
