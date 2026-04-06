@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
-	"time"
+//	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	"go.mau.fi/whatsmeow"
