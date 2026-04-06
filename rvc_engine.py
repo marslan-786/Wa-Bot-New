@@ -4,19 +4,31 @@ import urllib.parse
 import requests
 import subprocess
 import os
+import random
 from playwright.sync_api import sync_playwright
 
-# آڈیو کی لمبائی نکالنے کا ہلکا طریقہ (بغیر لبراوسا کے)
+# 10 مختلف یوزر ایجنٹس کی لسٹ
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+    "Mozilla/5.0 (AppleChromium; Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Edge/120.0.0.0",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:122.0) Gecko/20100101 Firefox/122.0"
+]
+
 def get_audio_duration(file_path):
     try:
-        print(f"[INFO] Fetching duration for: {file_path}")
         result = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", file_path],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
         )
         return float(result.stdout.strip())
-    except Exception as e:
-        print(f"[ERROR] Could not get duration: {str(e)}")
+    except:
         return 3.0
 
 def convert_voice(input_file, voice_id="7", pitch=16):
@@ -26,25 +38,28 @@ def convert_voice(input_file, voice_id="7", pitch=16):
 
     duration = get_audio_duration(input_file)
     
+    # ہر ریکویسٹ کے لیے رینڈم یوزر ایجنٹ سلیکٹ کرنا
+    selected_ua = random.choice(USER_AGENTS)
+
     with sync_playwright() as p:
-        print("[PROCESS] Launching a fresh isolated browser...")
-        # ہر بار ایک نیا براؤزر لانچ کرنا تاکہ پرانی کوئی بھی میموری باقی نہ رہے
+        # ہر بار بالکل فریش براؤزر لانچ ہوگا (No shared Cache/Profile)
         browser = p.chromium.launch(headless=True)
         
-        # 'new_context' کوکیز، لوکل سٹوریج اور انڈیکس ڈی بی کو خود بخود کلیئر رکھتا ہے
-        # ہم یوزر ایجنٹ کو بھی تھوڑا رینڈم کر سکتے ہیں تاکہ ویب سائٹ کو لگے کہ ڈیوائس بدل گئی ہے
+        # 'new_context' کوکیز اور سیشن کو مکمل الگ رکھتا ہے
+        # ہم نے یہاں Proxy کا آپشن بھی رکھا ہے اگر آپ بعد میں ڈالنا چاہیں
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            viewport={"width": 1280, "height": 720}
+            user_agent=selected_ua,
+            viewport={"width": 1280, "height": 720},
+            ignore_https_errors=True
         )
         
         page = context.new_page()
         
         try:
-            print("[STEP 1] Navigating to Voice.ai and bypassing Cloudflare...")
+            print(f"[PROCESS] New Thread Initialized with UA: {selected_ua[:40]}...")
             page.goto("https://voice.ai/tools/voice-changer", wait_until="networkidle", timeout=60000)
             
-            # ٹوکن نکالنا
+            # ٹوکن نکالنا (ہر بار نیا ہوگا کیونکہ کانٹیکسٹ نیا ہے)
             cookies = context.cookies()
             xsrf_token = ""
             for cookie in cookies:
@@ -53,75 +68,58 @@ def convert_voice(input_file, voice_id="7", pitch=16):
                     break
             
             if not xsrf_token:
-                print("[CRITICAL ERROR] XSRF-TOKEN not found. Cloudflare might have blocked the script.")
+                print("[CRITICAL] Token not found.")
                 return
 
-            print(f"[SUCCESS] Token Acquired: {xsrf_token[:20]}...")
-
-            # گوگل کلاؤڈ یو آر ایل لینا
-            print("[STEP 2] Requesting Google Cloud Upload URL...")
+            # کلاؤڈ یو آر ایل ریکویسٹ
             upload_req = context.request.post(
                 "https://voice.ai/api/upload/get-google-url",
                 headers={"x-xsrf-token": xsrf_token, "accept": "application/json"},
                 data={"file_type": "audio/mpeg", "filename": None}
             )
             
-            if upload_req.status != 200:
-                print(f"[ERROR] Failed to get upload URL. Status: {upload_req.status}, Response: {upload_req.text()}")
-                return
+            if upload_req.status != 200: return
 
             upload_data = upload_req.json()
             google_url = upload_data["url"]
             file_key = upload_data["fileKey"]
-            print(f"[INFO] Upload URL generated. Key: {file_key}")
 
-            # فائل اپلوڈ کرنا
-            print("[STEP 3] Uploading audio to Google Storage...")
+            # فائل اپلوڈ کرنا (Requests کے ذریعے الگ سیشن میں)
             with open(input_file, "rb") as f:
                 audio_bytes = f.read()
             
-            put_resp = requests.put(google_url, data=audio_bytes, headers={"Content-Type": "audio/mpeg"})
-            if put_resp.status_code != 200:
-                print(f"[ERROR] Audio upload failed. Status: {put_resp.status_code}")
-                return
-            print("[SUCCESS] Audio uploaded successfully.")
+            # یہاں ہم رینڈم یوزر ایجنٹ ہی استعمال کر رہے ہیں تاکہ مطابقت رہے
+            put_resp = requests.put(google_url, data=audio_bytes, headers={"Content-Type": "audio/mpeg", "User-Agent": selected_ua})
+            
+            if put_resp.status_code != 200: return
 
             # وائس چینج کی ریکویسٹ
-            print(f"[STEP 4] Sending conversion request (Voice ID: {voice_id})...")
             process_req = context.request.post(
                 "https://voice.ai/api/web-tools/queue/store/voice-changer",
                 headers={"x-xsrf-token": xsrf_token, "accept": "application/json"},
                 data={
                     "path": f"tmp/{file_key}",
-                    "original_filename": "wa_audio.mp3",
+                    "original_filename": "input_audio.mp3",
                     "voice_id": str(voice_id),
                     "pitch": int(pitch),
                     "duration": float(duration)
                 }
             )
             
-            result_text = process_req.text()
-            print(f"[DEBUG] API Full Response: {result_text}")
-            
-            result = json.loads(result_text)
+            result = process_req.json()
             if "data" in result and "url" in result["data"]:
-                final_url = result["data"]["url"]
-                print(f"[COMPLETE] Result Found: {final_url}")
-                # یہ لنک Go بوٹ ریڈ کرے گا
-                print(f"RESULT_URL:{final_url}")
+                print(f"RESULT_URL:{result['data']['url']}")
             else:
-                print(f"[ERROR] Conversion failed. Server said: {result.get('message', 'No message')}")
+                print(f"[ERROR] API Error: {result.get('message')}")
                 
         except Exception as e:
-            print(f"[EXCEPTION] Something went wrong in Python script: {str(e)}")
+            print(f"[EXCEPTION] {str(e)}")
         finally:
-            print("[INFO] Closing browser and clearing context...")
+            # سب کچھ کلوز کرنا تاکہ میموری ریلیز ہو جائے
             context.close()
             browser.close()
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("[ERROR] No input file provided.")
         sys.exit(1)
-    
     convert_voice(sys.argv[1])
