@@ -271,17 +271,9 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		react(client, v.Info.Chat, v.Info.ID, "🎵")
 		go handlePlayMusic(client, v, fullArgs)
 
-	case "yt", "youtube":
-		react(client, v.Info.Chat, v.Info.ID, "🎬")
-		go handleYTDirect(client, v, fullArgs)
-
 	case "yts":
 		react(client, v.Info.Chat, v.Info.ID, "🔍")
 		go handleYTS(client, v, fullArgs)
-
-	case "tt", "tiktok":
-		react(client, v.Info.Chat, v.Info.ID, "📱")
-		go handleTikTok(client, v, fullArgs)
 
 	case "tts":
 		react(client, v.Info.Chat, v.Info.ID, "🔍")
@@ -430,8 +422,20 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
         go handleToggleSettings(client, v, "anti_dm", fullArgs)
 			
 	case "fb", "facebook", "ig", "insta", "instagram", "tw", "x", "twitter", "pin", "pinterest", "threads", "snap", "snapchat", "reddit", "dm", "dailymotion", "vimeo", "rumble", "bilibili", "douyin", "kwai", "bitchute", "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp", "imgur", "giphy", "flickr", "9gag", "ifunny":
-	    react(client, v.Info.Chat, v.Info.ID, "🪩")
-		go handleUniversalDownload(client, v, fullArgs, cmd)
+		react(client, v.Info.Chat, v.Info.ID, "🪩")
+		// fullArgs کی جگہ rawArgs اور cmd کی جگہ command آ گیا ہے
+		go handleUniversalDownload(client, v, rawArgs, command)
+
+	case "tt", "tiktok":
+		react(client, v.Info.Chat, v.Info.ID, "📱")
+		// fullArgs کی جگہ rawArgs (جس میں اوریجنل کیپیٹل لیٹرز محفوظ ہیں)
+		go handleTikTok(client, v, rawArgs)
+
+	case "yt", "youtube":
+		react(client, v.Info.Chat, v.Info.ID, "🎬")
+		// fullArgs کی جگہ rawArgs
+		go handleYTDirect(client, v, rawArgs)
+
 		
 	// 🔥 THE AI MASTERMINDS
 	case "ai", "gpt", "chatgpt", "gemini", "claude", "llama", "groq", "bot", "ask":
