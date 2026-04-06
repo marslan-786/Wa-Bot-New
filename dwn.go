@@ -14,7 +14,7 @@ import (
 	"time"
 	"bufio"
 	"net/url"
-//	"bytes"
+	"bytes"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"

@@ -26,6 +26,9 @@ type BotSettings struct {
 	AutoReact       bool
 	AutoStatus      bool
 	StatusReact     bool
+	PrivateAntiDelete bool
+	AntiVV            bool
+	AntiDM            bool
 }
 
 func initSettingsDB() {
@@ -77,14 +80,29 @@ func getBotSettings(client *whatsmeow.Client) BotSettings {
 	cleanJID := client.Store.ID.ToNonAD().User
 
 	var settings BotSettings
-	err := settingsDB.QueryRow("SELECT prefix, mode, uptime_start, always_online, auto_read, auto_react, auto_status, status_react FROM bot_settings WHERE jid = ?", cleanJID).Scan(
-		&settings.Prefix, &settings.Mode, &settings.UptimeStart, &settings.AlwaysOnline, &settings.AutoRead, &settings.AutoReact, &settings.AutoStatus, &settings.StatusReact)
+	
+	// 🌟 FIX: SELECT کیوری میں private_antidelete, anti_vv اور anti_dm کا اضافہ کر دیا گیا ہے
+	err := settingsDB.QueryRow("SELECT prefix, mode, uptime_start, always_online, auto_read, auto_react, auto_status, status_react, private_antidelete, anti_vv, anti_dm FROM bot_settings WHERE jid = ?", cleanJID).Scan(
+		&settings.Prefix, 
+		&settings.Mode, 
+		&settings.UptimeStart, 
+		&settings.AlwaysOnline, 
+		&settings.AutoRead, 
+		&settings.AutoReact, 
+		&settings.AutoStatus, 
+		&settings.StatusReact, 
+		&settings.PrivateAntiDelete, // 👈 نیا
+		&settings.AntiVV,            // 👈 نیا
+		&settings.AntiDM,            // 👈 نیا
+	)
 	
 	if err == sql.ErrNoRows {
 		now := time.Now().Unix()
+		// اگر نیا یوزر ہے تو ڈیفالٹ سیٹنگز انسرٹ کریں
 		settingsDB.Exec("INSERT INTO bot_settings (jid, uptime_start) VALUES (?, ?)", cleanJID, now)
 		return BotSettings{Prefix: ".", Mode: "public", UptimeStart: now}
 	}
+	
 	return settings
 }
 
