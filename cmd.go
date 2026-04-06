@@ -7,6 +7,7 @@ import (
 	"strings"
 	"math/rand"
 	"time"
+	"encoding/json"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
@@ -19,6 +20,8 @@ import (
 // ==========================================
 // 🧠 MAIN HANDLER (Zero-Delay Interceptor)
 // ==========================================
+// فائل کے اوپر امپورٹس میں "encoding/json" لازمی ایڈ کر لینا
+
 func EventHandler(client *whatsmeow.Client, evt interface{}) {
 	switch v := evt.(type) {
 	case *events.Message:
@@ -27,7 +30,23 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 			return
 		}
 
-		// 🔥 اصل گیم چینجر: پوری پروسیسنگ کو Goroutine میں ڈال دیں!
+		// 🔍 ANTI-DM DEBUGGER: 100% Raw JSON Data
+		settings := getBotSettings(client)
+		if settings.AntiDM {
+			fmt.Println("\n--- [📥 RAW JSON DATA START] ---")
+			
+			// v.Info کے پورے سٹرکچر کو اوریجنل JSON فارمیٹ میں کنورٹ کریں
+			rawJSON, err := json.MarshalIndent(v.Info, "", "  ")
+			if err == nil {
+				fmt.Println(string(rawJSON))
+			} else {
+				fmt.Println("JSON Error:", err)
+			}
+			
+			fmt.Println("--- [📥 RAW JSON DATA END] ---\n")
+		}
+
+		// 🔥 اصل گیم چینجر
 		go processMessageAsync(client, v)
 	}
 }
@@ -55,6 +74,8 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 
 	// 🔥 1. سیشن کی سیٹنگز لائیں (نئے کلین طریقے سے)
 	settings := getBotSettings(client)
+	handleAntiDeleteLogic(client, v, settings)
+	handleAntiVVLogic(client, v, settings)
 
 	// 🔥 2. چیک کریں کہ یوزر اونر ہے یا نہیں
 	userIsOwner := isOwner(client, v)
@@ -235,7 +256,7 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	case "welcome":
 		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 		go handleGroupToggle(client, v, "Welcome Message", "welcome", fullArgs)
-	case "antidelete":
+	case "antideletes":
 		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 		go handleGroupToggle(client, v, "Anti-Delete", "antidelete", fullArgs)
 
@@ -323,12 +344,30 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	case "google", "search":
 		react(client, v.Info.Chat, v.Info.ID, "🔍")
 		go handleGoogle(client, v, fullArgs)
-
+    
+    // 👁️ OWNER COMMANDS
+	case "antivv":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleAntiVVToggle(client, v, fullArgs)    
+                
+    // 🛡️ OWNER COMMANDS
+	case "antidelete":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleAntiDeleteToggle(client, v, fullArgs)
+    
 	case "remini", "removebg":
 		react(client, v.Info.Chat, v.Info.ID, "⏳")
 		replyMessage(client, v, "⚠️ *Premium Feature:*\nThis feature requires a dedicated API Key. It will be unlocked in the next update by Silent Hackers!")
 		
-    
+    case "rvc", "vc":
+		react(client, v.Info.Chat, v.Info.ID, "🎙️")
+		go handleRVC(client, v)
+		
+	// 🚫 SECURITY COMMANDS
+	case "antidm":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		go handleAntiDMToggle(client, v, fullArgs)
+			
 	case "fb", "facebook", "ig", "insta", "instagram", "tw", "x", "twitter", "pin", "pinterest", "threads", "snap", "snapchat", "reddit", "dm", "dailymotion", "vimeo", "rumble", "bilibili", "douyin", "kwai", "bitchute", "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp", "imgur", "giphy", "flickr", "9gag", "ifunny":
 	    react(client, v.Info.Chat, v.Info.ID, "🪩")
 		go handleUniversalDownload(client, v, fullArgs, cmd)
@@ -513,6 +552,9 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
  │
  │ ➭ *%[3]sid*
  │    _Get Your Chat ID_
+ │
+ │ ➭ *%[3]svc* [Reply Voice] + [nmbr]
+ │    _change your voice_
  │ 
  ╰──────────────────────╯
  
@@ -726,4 +768,220 @@ func handleID(client *whatsmeow.Client, v *events.Message) {
 
 	// 5. میسج سینڈ کریں
 	replyMessage(client, v, card)
+}
+
+// ==========================================
+// 🛡️ ANTI-DELETE SYSTEM (Auto-Forwarding)
+// ==========================================
+func handleAntiDeleteLogic(client *whatsmeow.Client, v *events.Message, settings BotSettings) {
+	if protoMsg := v.Message.GetProtocolMessage(); protoMsg != nil && protoMsg.GetType() == waProto.ProtocolMessage_REVOKE {
+		if !settings.PrivateAntiDelete { return }
+
+		targetMsgID := protoMsg.GetKey().GetId()
+		senderJID := protoMsg.GetKey().GetParticipant()
+		if senderJID == "" { senderJID = v.Info.Sender.String() }
+
+		var rawMsg []byte
+		var msgTimestamp int64
+		err := settingsDB.QueryRow("SELECT msg_content, timestamp FROM message_cache WHERE msg_id = ?", targetMsgID).Scan(&rawMsg, &msgTimestamp)
+		
+		if err == nil && len(rawMsg) > 0 {
+			var originalMsg waProto.Message
+			proto.Unmarshal(rawMsg, &originalMsg)
+
+			loc, _ := time.LoadLocation("Asia/Karachi")
+			sentTime := time.Unix(msgTimestamp, 0).In(loc).Format("02 Jan 2006, 03:04 PM")
+			deletedTime := time.Now().In(loc).Format("02 Jan 2006, 03:04 PM")
+			
+			cleanSender := strings.Split(senderJID, "@")[0]
+
+			warningText := fmt.Sprintf(`❖ ── ✦ 🚫 𝗔𝗡𝗧𝗜-𝗗𝗘𝗟𝗘𝗧𝗘 🚫 ✦ ── ❖
+
+👤 *Sender:* @%s
+📅 *Sent At:* %s
+🗑️ *Deleted At:* %s
+
+_Attempted to delete this message!_
+╰──────────────────────╯`, cleanSender, sentTime, deletedTime)
+
+			ownerJID := client.Store.ID.ToNonAD() 
+
+			client.SendMessage(context.Background(), ownerJID, &waProto.Message{
+				ExtendedTextMessage: &waProto.ExtendedTextMessage{
+					Text: proto.String(warningText),
+					ContextInfo: &waProto.ContextInfo{ MentionedJID: []string{senderJID} },
+				},
+			})
+			client.SendMessage(context.Background(), ownerJID, &originalMsg)
+		}
+		return
+	}
+
+	if !strings.Contains(v.Info.Chat.String(), "@g.us") && v.Message != nil {
+		msgBytes, err := proto.Marshal(v.Message)
+		if err == nil {
+			settingsDB.Exec("INSERT OR REPLACE INTO message_cache (msg_id, sender_jid, msg_content, timestamp) VALUES (?, ?, ?, ?)", 
+				v.Info.ID, v.Info.Sender.String(), msgBytes, v.Info.Timestamp.Unix())
+		}
+	}
+}
+
+// ==========================================
+// 🛡️ COMMAND: .antidelete (On/Off)
+// ==========================================
+func handleAntiDeleteToggle(client *whatsmeow.Client, v *events.Message, args string) {
+	args = strings.ToLower(strings.TrimSpace(args))
+	if args != "on" && args != "off" {
+		replyMessage(client, v, "❌ Use: `.antidelete on` or `.antidelete off`")
+		return
+	}
+	
+	state := false
+	if args == "on" { state = true }
+	
+	cleanJID := client.Store.ID.ToNonAD().User
+	settingsDB.Exec("UPDATE bot_settings SET private_antidelete = ? WHERE jid = ?", state, cleanJID)
+	
+	react(client, v.Info.Chat, v.Info.ID, "✅")
+	replyMessage(client, v, fmt.Sprintf("✅ *Private Anti-Delete* is now *%s*", strings.ToUpper(args)))
+}
+
+// ==========================================
+// 👁️ ANTI-VIEWONCE SYSTEM (Auto-Forwarding)
+// ==========================================
+func handleAntiVVLogic(client *whatsmeow.Client, v *events.Message, settings BotSettings) {
+	if !settings.AntiVV || v.Message == nil || v.Info.IsFromMe {
+		return
+	}
+
+	// 1. چیک کریں کہ کیا یہ ویو ونس میسج ہے؟ (V1, V2 یا Audio Extension)
+	vo1 := v.Message.GetViewOnceMessage()
+	vo2 := v.Message.GetViewOnceMessageV2()
+	vo3 := v.Message.GetViewOnceMessageV2Extension()
+
+	if vo1 == nil && vo2 == nil && vo3 == nil {
+		return // ویو ونس نہیں ہے، واپس چلے جاؤ
+	}
+
+	// 2. اصل میڈیا میسج نکالیں
+	var imgMsg *waProto.ImageMessage
+	var vidMsg *waProto.VideoMessage
+	var audMsg *waProto.AudioMessage
+
+	if vo1 != nil {
+		imgMsg = vo1.GetMessage().GetImageMessage()
+		vidMsg = vo1.GetMessage().GetVideoMessage()
+	} else if vo2 != nil {
+		imgMsg = vo2.GetMessage().GetImageMessage()
+		vidMsg = vo2.GetMessage().GetVideoMessage()
+	} else if vo3 != nil {
+		audMsg = vo3.GetMessage().GetAudioMessage()
+	}
+
+	// 3. میڈیا ڈاؤنلوڈ کریں
+	ctx := context.Background()
+	var data []byte
+	var err error
+	var mType whatsmeow.MediaType
+
+	if imgMsg != nil {
+		data, err = client.Download(ctx, imgMsg)
+		mType = whatsmeow.MediaImage
+	} else if vidMsg != nil {
+		data, err = client.Download(ctx, vidMsg)
+		mType = whatsmeow.MediaVideo
+	} else if audMsg != nil {
+		data, err = client.Download(ctx, audMsg)
+		mType = whatsmeow.MediaAudio
+	}
+
+	if err != nil || len(data) == 0 { return }
+
+	// 4. دوبارہ اپلوڈ کریں
+	up, err := client.Upload(ctx, data, mType)
+	if err != nil { return }
+
+	// 5. کیپشن تیار کریں (پاکستانی ٹائم کے ساتھ)
+	senderJID := v.Info.Sender.String()
+	cleanSender := strings.Split(senderJID, "@")[0]
+	loc, _ := time.LoadLocation("Asia/Karachi")
+	recvTime := time.Now().In(loc).Format("02 Jan 2006, 03:04 PM")
+
+	chatType := "👤 Private Chat"
+	if strings.Contains(v.Info.Chat.String(), "@g.us") {
+		chatType = "👥 Group Chat"
+	}
+
+	caption := fmt.Sprintf(`❖ ── ✦ 👁️ 𝗔𝗡𝗧𝗜-𝗩𝗜𝗘𝗪 𝗢𝗡𝗖𝗘 ✦ ── ❖
+
+👤 *Sender:* @%s
+📍 *Source:* %s
+🕒 *Time:* %s
+
+_Attempted to send View Once media!_
+╰──────────────────────╯`, cleanSender, chatType, recvTime)
+
+	// 6. میسج تیار کر کے اونر کو بھیجیں
+	ownerJID := client.Store.ID.ToNonAD()
+	var finalMsg waProto.Message
+
+	if imgMsg != nil {
+		finalMsg.ImageMessage = &waProto.ImageMessage{
+			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
+			MediaKey: up.MediaKey, Mimetype: proto.String("image/jpeg"),
+			FileSHA256: up.FileSHA256, FileEncSHA256: up.FileEncSHA256,
+			FileLength: proto.Uint64(uint64(len(data))), Caption: proto.String(caption),
+		}
+	} else if vidMsg != nil {
+		finalMsg.VideoMessage = &waProto.VideoMessage{
+			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
+			MediaKey: up.MediaKey, Mimetype: proto.String("video/mp4"),
+			FileSHA256: up.FileEncSHA256, FileEncSHA256: up.FileEncSHA256,
+			FileLength: proto.Uint64(uint64(len(data))), Caption: proto.String(caption),
+		}
+	} else if audMsg != nil {
+		// آڈیو کے ساتھ کیپشن ڈائریکٹ نہیں جاتا، اس لیے پہلے ٹیکسٹ بھیجیں گے
+		client.SendMessage(ctx, ownerJID, &waProto.Message{
+			ExtendedTextMessage: &waProto.ExtendedTextMessage{ Text: proto.String(caption) },
+		})
+		finalMsg.AudioMessage = &waProto.AudioMessage{
+			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
+			MediaKey: up.MediaKey, Mimetype: proto.String("audio/ogg; codecs=opus"),
+			FileSHA256: up.FileEncSHA256, FileEncSHA256: up.FileEncSHA256,
+			FileLength: proto.Uint64(uint64(len(data))), PTT: proto.Bool(true),
+		}
+	}
+
+	// 7. فائنل سینڈ
+	client.SendMessage(ctx, ownerJID, &finalMsg)
+}
+
+// ==========================================
+// 👁️ COMMAND: .antivv (On/Off)
+// ==========================================
+func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string) {
+	args = strings.ToLower(strings.TrimSpace(args))
+	if args != "on" && args != "off" {
+		replyMessage(client, v, "❌ Use: `.antivv on` or `.antivv off`")
+		return
+	}
+	
+	state := false
+	if args == "on" { state = true }
+	
+	cleanJID := client.Store.ID.ToNonAD().User
+	settingsDB.Exec("UPDATE bot_settings SET anti_vv = ? WHERE jid = ?", state, cleanJID)
+	
+	react(client, v.Info.Chat, v.Info.ID, "✅")
+	replyMessage(client, v, fmt.Sprintf("✅ *Anti View-Once* is now *%s*", strings.ToUpper(args)))
+}
+
+func handleAntiDMToggle(client *whatsmeow.Client, v *events.Message, args string) {
+	args = strings.ToLower(strings.TrimSpace(args))
+	state := (args == "on")
+	cleanJID := client.Store.ID.ToNonAD().User
+	settingsDB.Exec("UPDATE bot_settings SET anti_dm = ? WHERE jid = ?", state, cleanJID)
+	
+	react(client, v.Info.Chat, v.Info.ID, "✅")
+	replyMessage(client, v, "🛡️ *Anti-DM Debug Mode* is now " + strings.ToUpper(args))
 }

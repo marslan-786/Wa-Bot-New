@@ -871,3 +871,162 @@ func extractVidsSaveURL(videoURL string, mode string) (string, string, error) {
 
 	return title, finalURL, nil
 }
+
+func handleRVC(client *whatsmeow.Client, v *events.Message) {
+	// 1. Check if the user replied to a message
+	contextInfo := v.Message.GetExtendedTextMessage().GetContextInfo()
+	if contextInfo == nil || contextInfo.GetQuotedMessage() == nil {
+		replyMessage(client, v, "❌ *Error:* Please reply to a voice or audio message with the command (e.g., .rvc)")
+		return
+	}
+
+	quotedMsg := contextInfo.GetQuotedMessage()
+	audioMsg := quotedMsg.GetAudioMessage()
+
+	// 2. Check if the quoted message is indeed audio
+	if audioMsg == nil {
+		replyMessage(client, v, "❌ *Error:* This command only works for audio or voice notes.")
+		return
+	}
+
+	// 3. Determine the Target JID (Default to current chat)
+	targetJID := v.Info.Chat
+	fullText := v.Message.GetExtendedTextMessage().GetText()
+	args := strings.Split(strings.TrimSpace(fullText), " ")
+
+	if len(args) > 1 {
+		rawTarget := args[1]
+		if strings.HasSuffix(rawTarget, "@g.us") {
+			// It's a group ID
+			parsed, err := types.ParseJID(rawTarget)
+			if err == nil {
+				targetJID = parsed
+			}
+		} else {
+			// It's likely a phone number
+			cleanNum := ""
+			for _, r := range rawTarget {
+				if r >= '0' && r <= '9' {
+					cleanNum += string(r)
+				}
+			}
+			if cleanNum != "" {
+				targetJID = types.NewJID(cleanNum, types.DefaultUserServer)
+			}
+		}
+	}
+
+	react(client, v.Info.Chat, v.Info.ID, "⏳")
+
+	// 4. Download audio data
+	audioData, err := client.Download(context.Background(), audioMsg)
+	if err != nil {
+		replyMessage(client, v, fmt.Sprintf("❌ *Download Error:*\n```\n%v\n```", err))
+		return
+	}
+
+	// 5. Setup temporary file names
+	timestamp := time.Now().UnixNano()
+	inOgg := fmt.Sprintf("in_%d.ogg", timestamp)
+	inMp3 := fmt.Sprintf("in_%d.mp3", timestamp)
+	downloadedMp3 := fmt.Sprintf("dl_%d.mp3", timestamp)
+	finalOgg := fmt.Sprintf("final_%d.ogg", timestamp)
+
+	// Auto cleanup files after execution
+	defer func() {
+		os.Remove(inOgg)
+		os.Remove(inMp3)
+		os.Remove(downloadedMp3)
+		os.Remove(finalOgg)
+	}()
+
+	// 6. Save original audio
+	os.WriteFile(inOgg, audioData, 0644)
+
+	// 7. Convert OGG to MP3 for API compatibility
+	exec.Command("ffmpeg", "-i", inOgg, "-y", inMp3).Run()
+
+	// 8. Execute Python script (voice_ai_api.py logic renamed to rvc_engine.py)
+	cmd := exec.Command("python3", "rvc_engine.py", inMp3)
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	
+	if err != nil {
+		replyMessage(client, v, fmt.Sprintf("❌ *API Processing Error:*\n```\n%v\n%s\n```", err, stderr.String()))
+		return
+	}
+
+    output := out.String()
+    var finalUrl string
+    lines := strings.Split(output, "\n")
+    for _, line := range lines {
+        if strings.Contains(line, "RESULT_URL:") {
+            finalUrl = strings.TrimSpace(strings.Replace(line, "RESULT_URL:", "", 1))
+            break
+        }
+    }
+
+	if finalUrl == "" {
+		replyMessage(client, v, "❌ *Error:* No valid audio link received from API.")
+		return
+	}
+
+	// 10. Download the converted MP3 from the URL
+	resp, err := http.Get(finalUrl)
+	if err != nil || resp.StatusCode != 200 {
+		replyMessage(client, v, "❌ *Fetch Error:* Failed to retrieve converted audio from API.")
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return
+	}
+	
+	dlFile, err := os.Create(downloadedMp3)
+	if err != nil {
+		replyMessage(client, v, "❌ *System Error:* Could not create local file for saving audio.")
+		resp.Body.Close()
+		return
+	}
+	io.Copy(dlFile, resp.Body)
+	dlFile.Close()
+	resp.Body.Close()
+
+	// 11. Convert MP3 back to WhatsApp Voice Note format (Opus)
+	exec.Command("ffmpeg", "-i", downloadedMp3, "-c:a", "libopus", "-b:a", "64k", "-vbr", "on", "-compression_level", "10", "-frame_duration", "60", "-y", finalOgg).Run()
+
+	// 12. Read final file
+	finalData, err := os.ReadFile(finalOgg)
+	if err != nil {
+		replyMessage(client, v, "❌ *Error:* Failed to read the processed audio file.")
+		return
+	}
+
+	// 13. Upload to WhatsApp servers
+	uploaded, err := client.Upload(context.Background(), finalData, whatsmeow.MediaAudio)
+	if err != nil {
+		replyMessage(client, v, "❌ *Upload Error:* Failed to upload processed audio to WhatsApp.")
+		return
+	}
+
+	// 14. Send as Push-To-Talk (Voice Note) to the Target JID
+	ptt := true
+	client.SendMessage(context.Background(), targetJID, &waProto.Message{
+		AudioMessage: &waProto.AudioMessage{
+			URL:           proto.String(uploaded.URL),
+			DirectPath:    proto.String(uploaded.DirectPath),
+			MediaKey:      uploaded.MediaKey,
+			Mimetype:      proto.String("audio/ogg; codecs=opus"),
+			FileEncSHA256: uploaded.FileEncSHA256,
+			FileSHA256:    uploaded.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(finalData))),
+			Seconds:       audioMsg.Seconds,
+			PTT:           &ptt,
+		},
+	})
+
+	// Reaction success
+	react(client, v.Info.Chat, v.Info.ID, "✅")
+}

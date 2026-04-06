@@ -45,9 +45,32 @@ func initSettingsDB() {
 		auto_read BOOLEAN DEFAULT 0,
 		auto_react BOOLEAN DEFAULT 0,
 		auto_status BOOLEAN DEFAULT 0,
-		status_react BOOLEAN DEFAULT 0
+		status_react BOOLEAN DEFAULT 0,
+		private_antidelete BOOLEAN DEFAULT 0
+		anti_vv BOOLEAN DEFAULT 0
+		
 	);`
 	settingsDB.Exec(createTableQuery)
+
+	// 🛡️ ANTI-DELETE CACHE TABLE
+	createCacheQuery := `
+	CREATE TABLE IF NOT EXISTS message_cache (
+		msg_id TEXT PRIMARY KEY,
+		sender_jid TEXT,
+		msg_content BLOB,
+		timestamp INTEGER
+	);`
+	settingsDB.Exec(createCacheQuery)
+
+	go func() {
+		for {
+			time.Sleep(1 * time.Hour)
+			oneDayAgo := time.Now().Unix() - (24 * 60 * 60)
+			settingsDB.Exec("DELETE FROM message_cache WHERE timestamp < ?", oneDayAgo)
+		// settingsDB.Exec کے نیچے یہ لائن ایڈ کریں یا ALTER کمانڈ چلائیں
+            settingsDB.Exec("ALTER TABLE bot_settings ADD COLUMN anti_dm BOOLEAN DEFAULT 0;")
+		}
+	}()
 }
 
 func getBotSettings(client *whatsmeow.Client) BotSettings {
