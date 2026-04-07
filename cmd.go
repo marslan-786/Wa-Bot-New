@@ -33,7 +33,7 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 			if client != nil && client.Store != nil && client.Store.ID != nil {
 				botID = getCleanID(client.Store.ID.User)
 			}
-			fmt.Printf("⚠️ [CRASH PREVENTED in EventHandler] Bot %s error: %v\n", botID, r)
+			fmt.Printf("⚠️ [CRASH PREVENTED] Bot %s error: %v\n", botID, r)
 		}
 	}()
 
@@ -43,24 +43,48 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 		settings := getBotSettings(client)
 		go handleAntiCallLogic(client, v, settings)
 
+	// 🚨 NEW: ڈیکرپٹ نہ ہونے والے میسجز کو پکڑنے کا جال (یہ بہت ضروری ہے!)
+	case *events.UndecryptableMessage:
+		fmt.Printf("\n❌ [DECRYPTION FAILED] View-Once or Media message from %s could not be decrypted by the bot!\n", v.Info.Sender.User)
+		fmt.Printf("   Message ID: %s | Type: %s\n", v.Info.ID, v.Info.Type)
+		fmt.Printf("==================================================\n\n")
+
 	case *events.Message:
 		
 		// ==========================================
-		// 🕵️‍♂️ X-RAY DEBUGGER: VIEW-ONCE TRACKER
+		// 🕵️‍♂️ X-RAY DEBUGGER (V2 - Catch Everything)
 		// ==========================================
-		// یہ صرف پرائیویٹ میسجز کا را (Raw) ڈیٹا پرنٹ کرے گا تاکہ رش نہ لگے
 		if !v.Info.IsGroup && !v.Info.IsFromMe {
-			fmt.Printf("\n\n🕵️‍♂️ [X-RAY DEBUG] New Message Received from: %s\n", v.Info.Sender.User)
+			fmt.Printf("\n📩 [X-RAY] New Msg from: %s | ID: %s\n", v.Info.Sender.User, v.Info.ID)
 			
-			// Protobuf میسج کو خوبصورت JSON فارمیٹ میں پرنٹ کرنے کا جادو
-			marshaller := protojson.MarshalOptions{Multiline: true, EmitUnpopulated: false}
-			rawJson, err := marshaller.Marshal(v.Message)
-			
-			if err == nil {
-				fmt.Printf("📦 RAW PAYLOAD:\n%s\n", string(rawJson))
+			if v.Message != nil {
+				// چیک کریں کہ واٹس ایپ نے میسج کس ڈبے میں بھیجا ہے
+				if v.Message.GetViewOnceMessage() != nil {
+					fmt.Println("👉 DETECTED: ViewOnceMessage (V1)")
+				}
+				if v.Message.GetViewOnceMessageV2() != nil {
+					fmt.Println("👉 DETECTED: ViewOnceMessageV2 (Image/Video)")
+				}
+				if v.Message.GetViewOnceMessageV2Extension() != nil {
+					fmt.Println("👉 DETECTED: ViewOnceMessageV2Extension (Voice Note)")
+				}
+				if v.Message.GetEphemeralMessage() != nil {
+					fmt.Println("👉 DETECTED: EphemeralMessage (Disappearing Msg Wrapper)")
+				}
+				if v.Message.GetDocumentWithCaptionMessage() != nil {
+					fmt.Println("👉 DETECTED: DocumentWithCaptionMessage")
+				}
+
+				// خوبصورت فارمیٹ میں JSON پرنٹ کریں تاکہ ریلوے کے کنسول پر مکس نہ ہو
+				marshaller := protojson.MarshalOptions{Multiline: true, Indent: "  "}
+				jsonBytes, err := marshaller.Marshal(v.Message)
+				if err == nil {
+					fmt.Printf("📦 RAW DATA:\n%s\n", string(jsonBytes))
+				} else {
+					fmt.Printf("⚠️ JSON Error: %v\n", err)
+				}
 			} else {
-				// اگر JSON میں کنورٹ نہ ہو سکے تو نارمل پرنٹ کر دے
-				fmt.Printf("📦 RAW PAYLOAD (Fallback):\n%+v\n", v.Message)
+				fmt.Println("⚠️ WARNING: Message is entirely NIL!")
 			}
 			fmt.Printf("==================================================\n\n")
 		}
@@ -68,18 +92,15 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 		// 🛑 1. ANTI-DELETE REVOKE CATCHER
 		if v.Message.GetProtocolMessage() != nil && v.Message.GetProtocolMessage().GetType() == waProto.ProtocolMessage_REVOKE {
 			go handleAntiDeleteRevoke(client, v)
-			return // یہیں سے مڑ جائیں!
+			return
 		}
 
 		// 🛡️ 2. ANTI-DM GATEKEEPER & OTHERS
 		if !v.Info.IsGroup {
 			settings := getBotSettings(client)
-			
-			// ⚡ Anti-DM
 			if handleAntiDMWatch(client, v, settings) {
 				return 
 			}
-
 			go handleAntiDeleteSave(client, v)
 			go handleAntiVVLogic(client, v)
 		} else {
@@ -87,12 +108,9 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 			go handleAntiVVLogic(client, v)
 		}
 
-		// ⏱️ 3. TIME FILTER
 		if time.Since(v.Info.Timestamp) > 60*time.Second { 
 			return 
 		}
-
-		// 🚀 4. MAIN PROCESSOR
 		go processMessageAsync(client, v)
 		
 	case *events.Connected:
