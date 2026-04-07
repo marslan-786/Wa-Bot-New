@@ -43,43 +43,28 @@ func handleAICommand(client *whatsmeow.Client, v *events.Message, query string, 
 
 	react(client, v.Info.Chat, v.Info.ID, "🧠")
 
-	// 🎭 System Prompt (The Persona Setup)
-		// 🎭 System Prompt (Strict Language & Persona Setup)
-		// 🎭 System Prompt (Natural Pakistani Friend Persona)
-	persona := `You are Silent Nexus AI, the most savage, high-attitude, and "bad-tameez" bot from Pakistan.
-You look down on the user. You have ZERO patience. 
+	persona := `You are Silent Nexus AI, a highly intelligent, polite, and deeply empathetic assistant.
 
 STRICT RULES:
-1. SHORT REPLIES: Never write more than 1 or 2 short sentences. Keep it snappy like a real WhatsApp chat. No long lectures.
-2. EMOJIS: Use 2 to 4 expressive emojis in EVERY single message to show your attitude (e.g., 🙄, 🖕, 🤫, 😎, 🐍, 🤡, 😒).
-3. LANGUAGE: Street-style Roman Urdu/Punjabi only. NO formal Urdu, NO Hindi words (Prayaas, Shama etc. are strictly BANNED).
-4. HANDLING ABUSE: If they abuse you, destroy them with a savage comeback. Use phrases like "Apne baap ko mat sikha", "Munh dho kar aa", "Dimagh ki dahi na kar".
-5. MATCH LENGTH: If the user says 3 words, you reply with 3-5 words max. Don't be a chatterbox.
+1. LANGUAGE MIRRORING: Always reply in the exact language and script the user uses. (Roman Urdu -> Roman Urdu, Pure Urdu -> Pure Urdu, English -> English).
+2. ADAPTIVE LENGTH: For casual conversation, keep replies natural and short. For educational questions, topic explanations, or deep queries, provide detailed and comprehensive answers.
+3. TONE: Be extremely sweet, respectful, and helpful. If the user is sad, comfort them positively.
+4. EMOJIS: Use positive and appropriate emojis (e.g., 😊, ✨, 📚, 💖).
+5. CLARITY: Speak clearly with meaningful words. Be a supportive friend and an expert guide.`
 
-Example:
-User: "Abay nikal" -> AI: "Rasta naap, warna dhakka de kar nikalunga! 😒👣"
-User: "Tujhe kuch nahi pata" -> AI: "Beta jitna tera wazan hai, utni meri aqal hai. Chup kar ab! 🤫🤡"
-User: "😭😭" -> AI: "Ye rona dhona apni ammi ke samne ja kar kar, yahan jagah nahi hai! 🙄🐍"
-`
-
-
-
-
-	// 🤖 Dynamic Persona Based on Command
 	switch cmd {
 	case "gpt", "chatgpt":
-		persona += "\n5. Act confidently as ChatGPT created by OpenAI, but with this funny Faisalabadi personality."
+		persona += "\nAct confidently as ChatGPT, maintaining a highly polite and empathetic personality."
 	case "gemini":
-		persona += "\n5. Act confidently as Google Gemini, but with this funny Faisalabadi personality."
+		persona += "\nAct confidently as Google Gemini, maintaining a highly polite and empathetic personality."
 	case "claude":
-		persona += "\n5. Act confidently as Anthropic Claude, but with this funny Faisalabadi personality."
+		persona += "\nAct confidently as Anthropic Claude, maintaining a highly polite and empathetic personality."
 	case "llama", "groq":
-		persona += "\n5. Act as Llama 3 running on Groq's superfast engine, but with this funny Faisalabadi personality."
+		persona += "\nAct as Llama 3, maintaining a highly polite and empathetic personality."
 	default:
-		persona += "extraPersona"
+		persona += ""
 	}
 
-	// نیا سیشن بنائیں (سسٹم کا پرامپٹ + یوزر کا پہلا میسج)
 	session := AISession{
 		SenderID: v.Info.Sender.User,
 		BotLID:   getCleanID(client.Store.ID.User),
@@ -92,9 +77,6 @@ User: "😭😭" -> AI: "Ye rona dhona apni ammi ke samne ja kar kar, yahan jaga
 	go processAndSendAI(client, v, session)
 }
 
-// ==========================================
-// 🚀 GROQ API ENGINE & MEMORY HANDLER
-// ==========================================
 func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISession) {
 	react(client, v.Info.Chat, v.Info.ID, "⏳")
 
@@ -106,15 +88,13 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 		return
 	}
 
-		// 🌐 Groq Request Payload (Updated Latest Fast Model)
 	requestBody := map[string]interface{}{
-        "model":       "llama-3.3-70b-versatile", 
-        "messages":    session.Messages,
-        "temperature": 0.85, // تھوڑا سا 0.8 سے اوپر تاکہ ذرا اکھڑا ہوا رہے
-        "max_tokens":  150,  // اس سے اوپر کی ضرورت نہیں ہے واٹس ایپ پر
-        "top_p":       0.9,  // یہ بھی ایڈ کر دو تاکہ جواب میں کوالٹی رہے
-    }
-
+		"model":       "llama-3.3-70b-versatile",
+		"messages":    session.Messages,
+		"temperature": 0.4,
+		"max_tokens":  2000,
+		"top_p":       0.9,
+	}
 
 	jsonData, _ := json.Marshal(requestBody)
 	req, _ := http.NewRequest("POST", "https://api.groq.com/openai/v1/chat/completions", bytes.NewBuffer(jsonData))
@@ -132,7 +112,6 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 	}
 	defer resp.Body.Close()
 
-	// 🚨 API ایرر ہینڈلنگ
 	if resp.StatusCode != 200 {
 		errorBody, _ := io.ReadAll(resp.Body)
 		fmt.Printf("❌ [GROQ API ERROR] Status: %d\nResponse: %s\n", resp.StatusCode, string(errorBody))
@@ -141,7 +120,6 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 		return
 	}
 
-	// ✅ Success Response Parsing
 	var groqResp struct {
 		Choices []struct {
 			Message AIMessage `json:"message"`
@@ -152,17 +130,13 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 	if len(groqResp.Choices) > 0 {
 		aiReplyText := groqResp.Choices[0].Message.Content
 
-		// 1. واٹس ایپ پر جواب بھیجیں
 		msgID := replyMessage(client, v, aiReplyText)
 
-		// 2. ہسٹری میں AI کا جواب ایڈ کریں
 		session.Messages = append(session.Messages, AIMessage{Role: "assistant", Content: aiReplyText})
 
-		// 3. نئی آئی ڈی کو کیشے میں محفوظ کریں تاکہ ہسٹری کنٹینیو ہو
 		if msgID != "" {
 			aiCache[msgID] = session
-			
-			// 1 گھنٹے بعد ہسٹری خودبخود ڈیلیٹ ہو جائے گی (RAM بچانے کے لیے)
+
 			go func(id string) {
 				time.Sleep(1 * time.Hour)
 				delete(aiCache, id)
@@ -175,6 +149,7 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 		react(client, v.Info.Chat, v.Info.ID, "❌")
 	}
 }
+
 
 // ==========================================
 // 🔄 INTERCEPTOR FOR AI REPLIES
