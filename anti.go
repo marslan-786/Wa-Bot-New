@@ -13,14 +13,28 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// ==========================================
-// 🛡️ COMMANDS: .antidelete & .antivv (Set Log Group)
-// ==========================================
-// ==========================================
-// 🛡️ COMMANDS: .antidelete & .antivv (Smart Toggles)
-// ==========================================
+func initGroupSettingsDB() {
+	query := `CREATE TABLE IF NOT EXISTS group_settings (
+		bot_jid TEXT,
+		chat_jid TEXT,
+		anti_delete BOOLEAN DEFAULT 0,
+		anti_vv BOOLEAN DEFAULT 0,
+		PRIMARY KEY (bot_jid, chat_jid)
+	);
+	CREATE TABLE IF NOT EXISTS message_cache (
+		msg_id TEXT PRIMARY KEY,
+		sender_jid TEXT,
+		msg_content BLOB,
+		timestamp INTEGER
+	);`
+	_, err := settingsDB.Exec(query)
+	if err != nil {
+		fmt.Println("DB Init Error:", err)
+	}
+}
 
 func handleAntiDeleteToggle(client *whatsmeow.Client, v *events.Message, args string) {
+	initGroupSettingsDB()
 	if !v.Info.IsGroup {
 		replyMessage(client, v, "❌ *Error:* Please use this command inside your 'Log Group' so the bot knows where to forward deleted messages.")
 		return
@@ -34,37 +48,36 @@ func handleAntiDeleteToggle(client *whatsmeow.Client, v *events.Message, args st
 	botJID := client.Store.ID.ToNonAD().User
 	chatJID := v.Info.Chat.ToNonAD().String()
 	
-	// 🔍 1. ڈیٹا بیس سے موجودہ سٹیٹس چیک کریں
 	var currentState bool
 	err := settingsDB.QueryRow("SELECT anti_delete FROM group_settings WHERE bot_jid = ? AND chat_jid = ?", botJID, chatJID).Scan(&currentState)
-	if err != nil { currentState = false } // اگر ریکارڈ نہیں ہے تو مطلب OFF ہے
+	if err != nil { 
+		currentState = false 
+	}
 
 	if args == "on" {
-		// اگر پہلے ہی ON ہے
 		if currentState {
 			replyMessage(client, v, "⚠️ *Already ON:* This group is already your active Log Group for Anti-Delete.")
 			return
 		}
 		
-		// باقی سب گروپس سے OFF کر کے اس گروپ میں ON کریں
 		settingsDB.Exec("UPDATE group_settings SET anti_delete = 0 WHERE bot_jid = ?", botJID)
 		
-		// 🌟 سمارٹ اپڈیٹ (دوسری سیٹنگز کو خراب کیے بغیر)
 		query := `INSERT INTO group_settings (bot_jid, chat_jid, anti_delete) VALUES (?, ?, 1) 
 				  ON CONFLICT(bot_jid, chat_jid) DO UPDATE SET anti_delete = 1`
-		settingsDB.Exec(query, botJID, chatJID)
+		_, errDB := settingsDB.Exec(query, botJID, chatJID)
+		if errDB != nil {
+			fmt.Println("DB Update Error:", errDB)
+		}
 		
 		react(client, v.Info.Chat, v.Info.ID, "✅")
 		replyMessage(client, v, "✅ *Log Group Activated!* Deleted private messages will now be forwarded here.")
 		
 	} else if args == "off" {
-		// اگر پہلے ہی OFF ہے
 		if !currentState {
 			replyMessage(client, v, "⚠️ *Already OFF:* Anti-Delete logging is not active in this group.")
 			return
 		}
 		
-		// صرف اسی گروپ سے OFF کریں
 		settingsDB.Exec("UPDATE group_settings SET anti_delete = 0 WHERE bot_jid = ? AND chat_jid = ?", botJID, chatJID)
 		
 		react(client, v.Info.Chat, v.Info.ID, "✅")
@@ -73,6 +86,7 @@ func handleAntiDeleteToggle(client *whatsmeow.Client, v *events.Message, args st
 }
 
 func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string) {
+	initGroupSettingsDB()
 	if !v.Info.IsGroup {
 		replyMessage(client, v, "❌ *Error:* Please use this command inside your 'Log Group'.")
 		return
@@ -86,19 +100,18 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 	botJID := client.Store.ID.ToNonAD().User
 	chatJID := v.Info.Chat.ToNonAD().String()
 	
-	// 🔍 1. ڈیٹا بیس سے موجودہ سٹیٹس چیک کریں
 	var currentState bool
 	err := settingsDB.QueryRow("SELECT anti_vv FROM group_settings WHERE bot_jid = ? AND chat_jid = ?", botJID, chatJID).Scan(&currentState)
-	if err != nil { currentState = false }
+	if err != nil { 
+		currentState = false 
+	}
 
 	if args == "on" {
-		// اگر پہلے ہی ON ہے
 		if currentState {
 			replyMessage(client, v, "⚠️ *Already ON:* This group is already your active Log Group for Anti-VV.")
 			return
 		}
 		
-		// باقی سب گروپس سے OFF کر کے اس گروپ میں ON کریں
 		settingsDB.Exec("UPDATE group_settings SET anti_vv = 0 WHERE bot_jid = ?", botJID)
 		
 		query := `INSERT INTO group_settings (bot_jid, chat_jid, anti_vv) VALUES (?, ?, 1) 
@@ -109,13 +122,11 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 		replyMessage(client, v, "✅ *Log Group Activated!* View-Once private media will now be forwarded here.")
 		
 	} else if args == "off" {
-		// اگر پہلے ہی OFF ہے
 		if !currentState {
 			replyMessage(client, v, "⚠️ *Already OFF:* Anti-VV logging is not active in this group.")
 			return
 		}
 		
-		// صرف اسی گروپ سے OFF کریں
 		settingsDB.Exec("UPDATE group_settings SET anti_vv = 0 WHERE bot_jid = ? AND chat_jid = ?", botJID, chatJID)
 		
 		react(client, v.Info.Chat, v.Info.ID, "✅")
@@ -123,17 +134,19 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 	}
 }
 
-// ==========================================
-// 📥 CACHE SAVER: (ONLY Saves Private Messages)
-// ==========================================
 func handleAntiDeleteSave(client *whatsmeow.Client, v *events.Message) {
-	if v.Info.IsGroup || v.Message == nil || v.Info.IsFromMe { return }
+	initGroupSettingsDB()
+	if v.Info.IsGroup || v.Message == nil || v.Info.IsFromMe { 
+		return 
+	}
 
 	botJID := client.Store.ID.ToNonAD().User
 
 	var logGroup string
 	err := settingsDB.QueryRow("SELECT chat_jid FROM group_settings WHERE bot_jid = ? AND anti_delete = 1 LIMIT 1", botJID).Scan(&logGroup)
-	if err != nil || logGroup == "" { return }
+	if err != nil || logGroup == "" { 
+		return 
+	}
 
 	msgBytes, err := proto.Marshal(v.Message)
 	if err == nil {
@@ -142,17 +155,19 @@ func handleAntiDeleteSave(client *whatsmeow.Client, v *events.Message) {
 	}
 }
 
-// ==========================================
-// 🚀 REVOKE CATCHER: (Forwards to Log Group with Time)
-// ==========================================
 func handleAntiDeleteRevoke(client *whatsmeow.Client, v *events.Message) {
-	if v.Info.IsGroup || v.Info.IsFromMe { return }
+	initGroupSettingsDB()
+	if v.Info.IsGroup || v.Info.IsFromMe { 
+		return 
+	}
 
 	botJID := client.Store.ID.ToNonAD().User
 	
 	var logGroup string
 	err := settingsDB.QueryRow("SELECT chat_jid FROM group_settings WHERE bot_jid = ? AND anti_delete = 1 LIMIT 1", botJID).Scan(&logGroup)
-	if err != nil || logGroup == "" { return }
+	if err != nil || logGroup == "" { 
+		return 
+	}
 
 	targetJID, _ := types.ParseJID(logGroup)
 	deletedMsgID := v.Message.GetProtocolMessage().GetKey().GetID()
@@ -161,12 +176,13 @@ func handleAntiDeleteRevoke(client *whatsmeow.Client, v *events.Message) {
 	var rawMsg []byte
 	var msgTimestamp int64
 	err = settingsDB.QueryRow("SELECT msg_content, timestamp FROM message_cache WHERE msg_id = ?", deletedMsgID).Scan(&rawMsg, &msgTimestamp)
-	if err != nil { return }
+	if err != nil { 
+		return 
+	}
 
 	var originalMsg waProto.Message
 	proto.Unmarshal(rawMsg, &originalMsg)
 
-	// 🕒 پاکستانی ٹائم کی سیٹنگ (PKT)
 	loc, _ := time.LoadLocation("Asia/Karachi")
 	sentTime := time.Unix(msgTimestamp, 0).In(loc).Format("02 Jan 2006, 03:04 PM")
 	deletedTime := time.Now().In(loc).Format("02 Jan 2006, 03:04 PM")
@@ -181,7 +197,6 @@ func handleAntiDeleteRevoke(client *whatsmeow.Client, v *events.Message) {
 _Attempted to delete this private message!_
 ╰──────────────────────╯`, cleanSender, sentTime, deletedTime)
 
-	// الرٹ بھیجیں
 	client.SendMessage(context.Background(), targetJID, &waProto.Message{
 		ExtendedTextMessage: &waProto.ExtendedTextMessage{
 			Text: proto.String(warningText),
@@ -189,21 +204,22 @@ _Attempted to delete this private message!_
 		},
 	})
 	
-	// اصل میسج بھیجیں
 	client.SendMessage(context.Background(), targetJID, &originalMsg)
 }
 
-// ==========================================
-// 👁️ ANTI-VV: VIEW-ONCE EXTRACTOR (With Time)
-// ==========================================
 func handleAntiVVLogic(client *whatsmeow.Client, v *events.Message) {
-	if v.Info.IsGroup || v.Message == nil || v.Info.IsFromMe { return }
+	initGroupSettingsDB()
+	if v.Info.IsGroup || v.Message == nil || v.Info.IsFromMe { 
+		return 
+	}
 
 	botJID := client.Store.ID.ToNonAD().User
 	
 	var logGroup string
 	err := settingsDB.QueryRow("SELECT chat_jid FROM group_settings WHERE bot_jid = ? AND anti_vv = 1 LIMIT 1", botJID).Scan(&logGroup)
-	if err != nil || logGroup == "" { return }
+	if err != nil || logGroup == "" { 
+		return 
+	}
 
 	targetJID, _ := types.ParseJID(logGroup)
 
@@ -211,7 +227,9 @@ func handleAntiVVLogic(client *whatsmeow.Client, v *events.Message) {
 	vo2 := v.Message.GetViewOnceMessageV2()
 	vo3 := v.Message.GetViewOnceMessageV2Extension()
 
-	if vo1 == nil && vo2 == nil && vo3 == nil { return }
+	if vo1 == nil && vo2 == nil && vo3 == nil { 
+		return 
+	}
 
 	var imgMsg *waProto.ImageMessage
 	var vidMsg *waProto.VideoMessage
@@ -242,11 +260,14 @@ func handleAntiVVLogic(client *whatsmeow.Client, v *events.Message) {
 		mType = whatsmeow.MediaAudio
 	}
 
-	if len(data) == 0 { return }
+	if len(data) == 0 { 
+		return 
+	}
 	up, err := client.Upload(ctx, data, mType)
-	if err != nil { return }
+	if err != nil { 
+		return 
+	}
 
-	// 🕒 پاکستانی ٹائم (PKT)
 	loc, _ := time.LoadLocation("Asia/Karachi")
 	recvTime := time.Now().In(loc).Format("02 Jan 2006, 03:04 PM")
 
@@ -290,6 +311,5 @@ func handleAntiVVLogic(client *whatsmeow.Client, v *events.Message) {
 		}
 	}
 
-	// 🌟 لاگ گروپ میں بھیج دیں
 	client.SendMessage(ctx, targetJID, &finalMsg)
 }

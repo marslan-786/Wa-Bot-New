@@ -854,90 +854,53 @@ func handleID(client *whatsmeow.Client, v *events.Message) {
 }
 
 func handleAntiCallLogic(client *whatsmeow.Client, c *events.CallOffer, settings BotSettings) {
-	// 1. گروپ کال بائی پاس
 	if c.CallCreator.Server == "g.us" || c.CallCreator.Server == types.GroupServer {
-		return 
+		return
 	}
 
 	botJID := client.Store.ID.ToNonAD().User
 	callerJID := c.CallCreator.ToNonAD()
 
-	// 🌟 2. DIRECT DATABASE CHECK (تاکہ getBotSettings کا کوئی بھی بگ اسے روک نہ سکے)
 	isCallEnabled := settings.AntiCall
 	var dbCheck bool
 	errDB := settingsDB.QueryRow("SELECT anti_call FROM bot_settings WHERE jid = ?", botJID).Scan(&dbCheck)
 	if errDB == nil && dbCheck {
-		isCallEnabled = true // اگر ڈیٹا بیس میں آن ہے، تو زبردستی آن کر دو!
+		isCallEnabled = true
 	}
 
-	// اگر آف ہے یا اپنا نمبر ہے تو لاگ پرنٹ کر کے واپس
-	if !isCallEnabled || callerJID.User == botJID { 
-		// fmt.Println("⚠️ [ANTI-CALL] Skipped: Anti-Call is OFF or Caller is Bot.")
-		return 
+	if !isCallEnabled || callerJID.User == botJID {
+		return
 	}
 
-	// 3. واٹس میو سٹور سے سیو نمبر چیک کریں
 	contact, err := client.Store.Contacts.GetContact(context.Background(), callerJID)
 	isSaved := (err == nil && contact.Found && contact.FullName != "")
 
-	// 🛑 ایکشن ٹائم!
 	if !isSaved {
 		fmt.Printf("📞 [ANTI-CALL] Triggered! Dropping call from Unsaved Number: %s\n", callerJID.User)
 
-		// ⚡ 1. MILLISECOND DROP (فوراً کال کاٹیں)
 		client.RejectCall(context.Background(), c.CallCreator, c.CallID)
-		client.RejectCall(context.Background(), callerJID, c.CallID) // ڈبل فائر (Safety Backup)
-
-		// ⚡ 2. وارننگ میسج (تاکہ واٹس ایپ کال کٹنے کا پراسیس مکمل کر لے)
-		warning := "⚠️ *Silent Nexus Security*\n\nVoice/Video calls from unsaved numbers are automatically rejected. You are being blocked."
-		client.SendMessage(context.Background(), callerJID, &waProto.Message{
-			Conversation: proto.String(warning),
-		})
-
-		time.Sleep(1 * time.Second) // 1 سیکنڈ کا ڈیلے ضروری ہے ورنہ بلاک کی کمانڈ فیل ہو سکتی ہے
-
-		// ⚡ 3. بلاک اور چیٹ ڈیلیٹ
-		client.UpdateBlocklist(context.Background(), callerJID, events.BlocklistChangeActionBlock)
-		
-		patch := appstate.BuildDeleteChat(callerJID, time.Now(), nil, true)
-		client.SendAppState(context.Background(), patch)
-		
-		fmt.Printf("✅ [ANTI-CALL] Successfully Blocked & Deleted: %s\n", callerJID.User)
-	} else {
-		// اگر واٹس ایپ اسے سیو نمبر مان رہا ہے تو ٹرمینل پر بتا دے گا
-		fmt.Printf("ℹ️ [ANTI-CALL] Skipped: WhatsApp thinks %s is a SAVED contact.\n", callerJID.User)
+		client.RejectCall(context.Background(), callerJID, c.CallID)
 	}
 }
 
-// ==========================================
-// 🛡️ ANTI-DM LOGIC (Double Trigger: Block & Delete for JID + LID)
-// ==========================================
-// ==========================================
-// 🛡️ ANTI-DM LOGIC (User's Proven Logic + SQLite)
-// ==========================================
 func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) bool {
 	botJID := client.Store.ID.ToNonAD().User
 
-	// 1. DIRECT DATABASE CHECK (SQLite)
 	isEnabled := settings.AntiDM
 	var dbCheck bool
 	errDB := settingsDB.QueryRow("SELECT anti_dm FROM bot_settings WHERE jid = ?", botJID).Scan(&dbCheck)
 	if errDB == nil && dbCheck {
-		isEnabled = true 
+		isEnabled = true
 	}
 
-	// 2. بیسک فلٹرز
 	if !isEnabled || v.Info.IsGroup || v.Info.IsFromMe || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer || isOwner(client, v) {
 		return false
 	}
 
-	// =========================================================
-	// 🟢 JID EXTRACTION LOGIC (تمہاری پرانی اور کامیاب لاجک)
-	// =========================================================
 	var realSender types.JID
 	if v.Info.Sender.Server == types.HiddenUserServer {
 		if !v.Info.SenderAlt.IsEmpty() {
-			realSender = v.Info.SenderAlt.ToNonAD() 
+			realSender = v.Info.SenderAlt.ToNonAD()
 		} else {
 			realSender = v.Info.Sender.ToNonAD()
 		}
@@ -945,22 +908,19 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 		realSender = v.Info.Sender.ToNonAD()
 	}
 
-	// 4. کانٹیکٹ چیک کریں
 	contact, err := client.Store.Contacts.GetContact(context.Background(), realSender)
 	isSaved := err == nil && contact.Found && contact.FullName != ""
-	
-	// 5. اگر نمبر سیو نہیں ہے (Unknown Number)
+
 	if !isSaved {
 		fmt.Printf("🛡️ [ANTI-DM] TRIGGERED [Bot: %s]: Unsaved number -> %s\n", botJID, realSender.User)
-		
+
 		warning := "⚠️ *Silent Nexus Security*\n\nDirect messages from unsaved numbers are not allowed. You are being blocked automatically."
 		client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
 			Conversation: proto.String(warning),
 		})
-		
-		time.Sleep(1 * time.Second) // وارننگ جانے کا ویٹ
 
-		// 🛑 بلاک کرنے کی کوشش (Dual Try - تمہاری لاجک)
+		time.Sleep(2 * time.Second)
+
 		_, errBlock1 := client.UpdateBlocklist(context.Background(), v.Info.Sender.ToNonAD(), events.BlocklistChangeActionBlock)
 		if errBlock1 != nil {
 			_, errBlock2 := client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
@@ -973,7 +933,8 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 			fmt.Printf("✅ [ANTI-DM] Successfully blocked LID: %s\n", v.Info.Sender.String())
 		}
 
-		// 🛑 چیٹ ڈیلیٹ کریں (Dual Patch - تمہاری لاجک)
+		time.Sleep(1 * time.Second)
+
 		lastMessageKey := &waCommon.MessageKey{
 			RemoteJID: proto.String(v.Info.Chat.String()),
 			FromMe:    proto.Bool(v.Info.IsFromMe),
@@ -982,18 +943,17 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 
 		patchInfo1 := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, lastMessageKey, true)
 		errPatch1 := client.SendAppState(context.Background(), patchInfo1)
-		
-		// اصلی نمبر کے لیے بھی ڈیلیٹ کی کمانڈ بھیجیں (بغیر میسج آئی ڈی کے)
+
 		patchInfo2 := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, nil, true)
 		errPatch2 := client.SendAppState(context.Background(), patchInfo2)
-		
+
 		if errPatch1 == nil || errPatch2 == nil {
 			fmt.Printf("✅ [ANTI-DM] Chat DELETED from WhatsApp screen for: %s\n", realSender.User)
 		} else {
 			fmt.Printf("❌ [ANTI-DM ERROR] Delete failed. Patch1: %v | Patch2: %v\n", errPatch1, errPatch2)
 		}
 
-		return true 
+		return true
 	}
 
 	return false
