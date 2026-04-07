@@ -18,6 +18,7 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/proto/waCommon"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // ==========================================
@@ -39,30 +40,49 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 	switch v := evt.(type) {
 	
 	case *events.CallOffer:
-		go handleAntiCallLogic(client, v, getBotSettings(client))
+		settings := getBotSettings(client)
+		go handleAntiCallLogic(client, v, settings)
 
 	case *events.Message:
 		
+		// ==========================================
+		// 🕵️‍♂️ X-RAY DEBUGGER: VIEW-ONCE TRACKER
+		// ==========================================
+		// یہ صرف پرائیویٹ میسجز کا را (Raw) ڈیٹا پرنٹ کرے گا تاکہ رش نہ لگے
+		if !v.Info.IsGroup && !v.Info.IsFromMe {
+			fmt.Printf("\n\n🕵️‍♂️ [X-RAY DEBUG] New Message Received from: %s\n", v.Info.Sender.User)
+			
+			// Protobuf میسج کو خوبصورت JSON فارمیٹ میں پرنٹ کرنے کا جادو
+			marshaller := protojson.MarshalOptions{Multiline: true, EmitUnpopulated: false}
+			rawJson, err := marshaller.Marshal(v.Message)
+			
+			if err == nil {
+				fmt.Printf("📦 RAW PAYLOAD:\n%s\n", string(rawJson))
+			} else {
+				// اگر JSON میں کنورٹ نہ ہو سکے تو نارمل پرنٹ کر دے
+				fmt.Printf("📦 RAW PAYLOAD (Fallback):\n%+v\n", v.Message)
+			}
+			fmt.Printf("==================================================\n\n")
+		}
+
 		// 🛑 1. ANTI-DELETE REVOKE CATCHER
 		if v.Message.GetProtocolMessage() != nil && v.Message.GetProtocolMessage().GetType() == waProto.ProtocolMessage_REVOKE {
 			go handleAntiDeleteRevoke(client, v)
 			return // یہیں سے مڑ جائیں!
 		}
 
-		// 🛡️ 2. ANTI-DM GATEKEEPER (صرف پرائیویٹ چیٹس کے لیے)
+		// 🛡️ 2. ANTI-DM GATEKEEPER & OTHERS
 		if !v.Info.IsGroup {
 			settings := getBotSettings(client)
 			
-			// ⚡ اگر Anti-DM نے بلاک مار دیا ہے، تو پروسیسنگ فوراً یہیں روک دو!
+			// ⚡ Anti-DM
 			if handleAntiDMWatch(client, v, settings) {
 				return 
 			}
 
-			// اگر بلاک نہیں ہوا (یعنی سیو نمبر ہے) تو کیشے اور ویو ونس چیک کرو
 			go handleAntiDeleteSave(client, v)
 			go handleAntiVVLogic(client, v)
 		} else {
-			// اگر گروپ ہے تو سیدھا کیشے اور ویو ونس چیک کرو
 			go handleAntiDeleteSave(client, v)
 			go handleAntiVVLogic(client, v)
 		}
