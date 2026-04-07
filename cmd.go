@@ -921,7 +921,7 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 			Conversation: proto.String(warning),
 		})
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(0.5 * time.Second)
 
 		_, errBlock1 := client.UpdateBlocklist(context.Background(), v.Info.Sender.ToNonAD(), events.BlocklistChangeActionBlock)
 		if errBlock1 != nil {
