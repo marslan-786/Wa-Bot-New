@@ -18,7 +18,7 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/proto/waCommon"
-	"google.golang.org/protobuf/encoding/protojson"
+//	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // ==========================================

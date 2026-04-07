@@ -218,13 +218,15 @@ func handleTags(client *whatsmeow.Client, v *events.Message, isHidden bool, args
 	})
 }
 
+// ==========================================
+// 🚀 .vv COMMAND (Silent Media Extractor)
+// ==========================================
 func handleVV(client *whatsmeow.Client, v *events.Message) {
 	extMsg := v.Message.GetExtendedTextMessage()
 	if extMsg == nil || extMsg.ContextInfo == nil || extMsg.ContextInfo.QuotedMessage == nil {
+		replyMessage(client, v, "❌ Please reply to an image, video, or voice note!")
 		return
 	}
-
-	fmt.Println("\n--- [ SERVER RAW DATA LOG START ] ---")
 
 	quoted := extMsg.ContextInfo.QuotedMessage
 	var data []byte
@@ -233,79 +235,45 @@ func handleVV(client *whatsmeow.Client, v *events.Message) {
 
 	extractMedia := func(m *waProto.Message) bool {
 		if img := m.GetImageMessage(); img != nil {
-			fmt.Printf("[REQUEST] Downloading Image from WA Server: %s\n", img.GetURL())
 			data, err = client.Download(context.Background(), img)
-			if err != nil {
-				fmt.Printf("[ERROR] Download Failed: %v\n", err)
-				return false
+			if err == nil {
+				up, _ := client.Upload(context.Background(), data, whatsmeow.MediaImage)
+				msg.ImageMessage = &waProto.ImageMessage{
+					URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
+					MediaKey: up.MediaKey, Mimetype: proto.String("image/jpeg"),
+					FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
+					FileLength: proto.Uint64(uint64(len(data))), Caption: proto.String("🔓 Extracted by Silent Nexus"),
+				}
+				return true
 			}
-			fmt.Printf("[RESPONSE] Downloaded Bytes: %d\n", len(data))
-
-			fmt.Printf("[REQUEST] Uploading %d bytes to WA Server...\n", len(data))
-			up, errUpload := client.Upload(context.Background(), data, whatsmeow.MediaImage)
-			if errUpload != nil {
-				fmt.Printf("[ERROR] Upload Failed: %v\n", errUpload)
-				return false
-			}
-			fmt.Printf("[RESPONSE] Upload Success | New URL: %s\n", up.URL)
-
-			msg.ImageMessage = &waProto.ImageMessage{
-				URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
-				MediaKey: up.MediaKey, Mimetype: proto.String("image/jpeg"),
-				FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
-				FileLength: proto.Uint64(uint64(len(data))), Caption: proto.String("🔓 Extracted"),
-			}
-			return true
-
 		} else if vid := m.GetVideoMessage(); vid != nil {
-			fmt.Printf("[REQUEST] Downloading Video from WA Server: %s\n", vid.GetURL()) // FIXED
 			data, err = client.Download(context.Background(), vid)
-			if err != nil {
-				fmt.Printf("[ERROR] Download Failed: %v\n", err)
-				return false
+			if err == nil {
+				up, _ := client.Upload(context.Background(), data, whatsmeow.MediaVideo)
+				msg.VideoMessage = &waProto.VideoMessage{
+					URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
+					MediaKey: up.MediaKey, Mimetype: proto.String("video/mp4"),
+					FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
+					FileLength: proto.Uint64(uint64(len(data))), Caption: proto.String("🔓 Extracted by Silent Nexus"),
+				}
+				return true
 			}
-			fmt.Printf("[RESPONSE] Downloaded Bytes: %d\n", len(data))
-
-			fmt.Printf("[REQUEST] Uploading %d bytes to WA Server...\n", len(data))
-			up, errUpload := client.Upload(context.Background(), data, whatsmeow.MediaVideo)
-			if errUpload != nil {
-				fmt.Printf("[ERROR] Upload Failed: %v\n", errUpload)
-				return false
-			}
-			fmt.Printf("[RESPONSE] Upload Success | New URL: %s\n", up.URL)
-
-			msg.VideoMessage = &waProto.VideoMessage{
-				URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
-				MediaKey: up.MediaKey, Mimetype: proto.String("video/mp4"),
-				FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
-				FileLength: proto.Uint64(uint64(len(data))), Caption: proto.String("🔓 Extracted"),
-			}
-			return true
-
 		} else if aud := m.GetAudioMessage(); aud != nil {
-			fmt.Printf("[REQUEST] Downloading Audio from WA Server: %s\n", aud.GetURL()) // FIXED
 			data, err = client.Download(context.Background(), aud)
-			if err != nil {
-				fmt.Printf("[ERROR] Download Failed: %v\n", err)
-				return false
+			if err == nil {
+				up, _ := client.Upload(context.Background(), data, whatsmeow.MediaAudio)
+				msg.AudioMessage = &waProto.AudioMessage{
+					URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
+					MediaKey: up.MediaKey, Mimetype: proto.String("audio/ogg; codecs=opus"),
+					FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
+					FileLength: proto.Uint64(uint64(len(data))), PTT: proto.Bool(true),
+				}
+				// آڈیو کے لیے کیپشن الگ سے بھیجیں گے
+				client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
+					Conversation: proto.String("🔓 Extracted Audio by Silent Nexus:"),
+				})
+				return true
 			}
-			fmt.Printf("[RESPONSE] Downloaded Bytes: %d\n", len(data))
-
-			fmt.Printf("[REQUEST] Uploading %d bytes to WA Server...\n", len(data))
-			up, errUpload := client.Upload(context.Background(), data, whatsmeow.MediaAudio)
-			if errUpload != nil {
-				fmt.Printf("[ERROR] Upload Failed: %v\n", errUpload)
-				return false
-			}
-			fmt.Printf("[RESPONSE] Upload Success | New URL: %s\n", up.URL)
-
-			msg.AudioMessage = &waProto.AudioMessage{
-				URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath),
-				MediaKey: up.MediaKey, Mimetype: proto.String("audio/ogg; codecs=opus"),
-				FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256,
-				FileLength: proto.Uint64(uint64(len(data))), PTT: proto.Bool(true),
-			}
-			return true
 		}
 		return false
 	}
@@ -320,11 +288,13 @@ func handleVV(client *whatsmeow.Client, v *events.Message) {
 		extractMedia(quoted) 
 	}
 
-	if data != nil {
-		client.SendMessage(context.Background(), v.Info.Chat, &msg)
-		fmt.Println("[RESPONSE] Final Message Successfully Sent to Chat.")
+	if data == nil {
+		replyMessage(client, v, "❌ Failed to extract media. Keys might be unavailable.")
+		return
 	}
-	fmt.Println("--- [ SERVER RAW DATA LOG END ] ---\n")
+	
+	react(client, v.Info.Chat, v.Info.ID, "🚀")
+	client.SendMessage(context.Background(), v.Info.Chat, &msg)
 }
 
 // ==========================================
