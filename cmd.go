@@ -914,47 +914,20 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 	isSaved := err == nil && contact.Found && contact.FullName != ""
 
 	if !isSaved {
-		fmt.Printf("🛡️ [ANTI-DM] TRIGGERED [Bot: %s]: Unsaved number -> %s\n", botJID, realSender.User)
-
-		warning := "⚠️ *Silent Nexus Security*\n\nDirect messages from unsaved numbers are not allowed. You are being blocked automatically."
-		client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
-			Conversation: proto.String(warning),
-		})
-
-		time.Sleep(500 * time.Millisecond)
-
-		_, errBlock1 := client.UpdateBlocklist(context.Background(), v.Info.Sender.ToNonAD(), events.BlocklistChangeActionBlock)
-		if errBlock1 != nil {
-			_, errBlock2 := client.UpdateBlocklist(context.Background(), realSender, events.BlocklistChangeActionBlock)
-			if errBlock2 == nil {
-				fmt.Printf("✅ [ANTI-DM] Successfully blocked real number: %s\n", realSender.String())
-			} else {
-				fmt.Printf("❌ [ANTI-DM ERROR] Block failed: %v\n", errBlock2)
+		go func() {
+			lastMessageKey := &waCommon.MessageKey{
+				RemoteJID: proto.String(v.Info.Chat.String()),
+				FromMe:    proto.Bool(v.Info.IsFromMe),
+				ID:        proto.String(v.Info.ID),
 			}
-		} else {
-			fmt.Printf("✅ [ANTI-DM] Successfully blocked LID: %s\n", v.Info.Sender.String())
-		}
 
-		time.Sleep(1 * time.Second)
+			patchInfo1 := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, lastMessageKey, true)
+			client.SendAppState(context.Background(), patchInfo1)
 
-		lastMessageKey := &waCommon.MessageKey{
-			RemoteJID: proto.String(v.Info.Chat.String()),
-			FromMe:    proto.Bool(v.Info.IsFromMe),
-			ID:        proto.String(v.Info.ID),
-		}
-
-		patchInfo1 := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, lastMessageKey, true)
-		errPatch1 := client.SendAppState(context.Background(), patchInfo1)
-
-		patchInfo2 := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, nil, true)
-		errPatch2 := client.SendAppState(context.Background(), patchInfo2)
-
-		if errPatch1 == nil || errPatch2 == nil {
-			fmt.Printf("✅ [ANTI-DM] Chat DELETED from WhatsApp screen for: %s\n", realSender.User)
-		} else {
-			fmt.Printf("❌ [ANTI-DM ERROR] Delete failed. Patch1: %v | Patch2: %v\n", errPatch1, errPatch2)
-		}
-
+			patchInfo2 := appstate.BuildDeleteChat(realSender, v.Info.Timestamp, nil, true)
+			client.SendAppState(context.Background(), patchInfo2)
+		}()
+		
 		return true
 	}
 
