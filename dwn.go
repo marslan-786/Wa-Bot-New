@@ -32,9 +32,10 @@ type MediaSession struct {
 }
 
 type SearchResult struct {
-	Title string
-	Url   string
+	Title string `json:"title"`
+	URL   string `json:"url"`
 }
+
 
 type YTDownloadState struct {
 	Url      string
@@ -685,30 +686,40 @@ func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	react(client, v.Info.Chat, v.Info.ID, "🔍")
 
 	// Python Script چلائیں
-	cmd := exec.Command("python3", "tiktok_search.py", query)
-	
-	// CombinedOutput یوز کریں تاکہ اگر کوئی ایرر آئے تو ہم لاگز دیکھ سکیں
+	cmd := exec.Command("python3", "tiktok_nav.py", query)
 	out, err := cmd.CombinedOutput()
+	
+	// 🔥 DEBUG PRINT (دوسرے بوٹ میں بھی یہ لگا لو، زندگی آسان رہے گی)
+	// fmt.Println(string(out))
+
 	if err != nil { 
 		fmt.Printf("❌ [GO] Execution Error: %v\n", err)
 		react(client, v.Info.Chat, v.Info.ID, "❌") 
 		return 
 	}
 
-	// 🔥 CRITICAL FIX: صرف آخری لائن نکالیں (جیسا پرانے بوٹ میں تھا)
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	lastLine := lines[len(lines)-1]
 
 	var results []SearchResult
 	
-	// پہلے آخری لائن کو Parse کرنے کی کوشش کریں
-	if jsonErr := json.Unmarshal([]byte(lastLine), &results); jsonErr != nil || len(results) == 0 {
-		// اگر آخری لائن کام نہ کرے تو پورے آؤٹ پٹ کو ٹرائی کریں (Fallback)
-		if err2 := json.Unmarshal(out, &results); err2 != nil || len(results) == 0 {
+	// 1. صرف آخری لائن کو Parse کرنے کی کوشش کریں
+	jsonErr := json.Unmarshal([]byte(lastLine), &results)
+	
+	// 2. Fallback *صرف* اس وقت چلائیں جب واقعی Parse Error ہو (len == 0 پر نہیں)
+	if jsonErr != nil {
+		if err2 := json.Unmarshal(out, &results); err2 != nil {
 			fmt.Printf("❌ [GO] JSON Parse Error: %v\nRaw Output: %s\n", jsonErr, string(out))
 			react(client, v.Info.Chat, v.Info.ID, "❌")
 			return
 		}
+	}
+
+	// 3. اب اگر پارسنگ ہو گئی لیکن رزلٹ خالی ہے (جیسے IP بلاک یا کوئی ویڈیو نہ ملنا)
+	if len(results) == 0 {
+		fmt.Println("⚠️ [GO] No results found on TikTok.")
+		replyMessage(client, v, "❌ No results found on TikTok.")
+		return
 	}
 
 	// NEW ELEGANT DESIGN
@@ -716,7 +727,7 @@ func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	icons := []string{"❶", "❷", "❸", "❹", "❺", "❻", "❼", "❽", "❾", "❿"}
 	
 	limit := len(results)
-	if limit > 5 { limit = 5 } // مینیو کو کلین رکھنے کے لیے 5 رزلٹس
+	if limit > 5 { limit = 5 }
 
 	for i := 0; i < limit; i++ {
 		menuText += fmt.Sprintf(" %s %s\n\n", icons[i], results[i].Title)
@@ -726,11 +737,11 @@ func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	// مینیو سینڈ کریں
 	msgID := replyMessage(client, v, menuText)
 
-	// Cache میں سیو کریں (MediaSession یوز کر رہے ہیں تاکہ HandleMenuReplies کام کرے)
 	if msgID != "" {
 		ttSearchCache[msgID] = MediaSession{Results: results[:limit], SenderID: v.Info.Sender.User}
 	}
 }
+
 
 
 func handleTikTok(client *whatsmeow.Client, v *events.Message, args string) {
