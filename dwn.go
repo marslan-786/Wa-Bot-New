@@ -504,7 +504,7 @@ func handleYTS(client *whatsmeow.Client, v *events.Message, query string) {
 		
 		title := strings.TrimSpace(parts[0])
 		vidID := strings.TrimSpace(parts[1])
-		results = append(results, SearchResult{Title: title, Url: "https://www.youtube.com/watch?v=" + vidID})
+		results = append(results, SearchResult{Title: title, URL: "https://www.youtube.com/watch?v=" + vidID})
 		
 		menuText += fmt.Sprintf(" %s %s\n\n", icons[count], title)
 		count++
@@ -634,7 +634,7 @@ func HandleMenuReplies(client *whatsmeow.Client, v *events.Message, bodyClean st
 		if strings.Contains(v.Info.Sender.User, session.SenderID) {
 			delete(ytSearchCache, qID)
 			if idx, err := strconv.Atoi(bodyClean); err == nil && idx > 0 && idx <= len(session.Results) {
-				handleYTQualityMenu(client, v, session.Results[idx-1].Url)
+				handleYTQualityMenu(client, v, session.Results[idx-1].URL)
 			}
 			return true
 		}
@@ -669,7 +669,7 @@ func HandleMenuReplies(client *whatsmeow.Client, v *events.Message, bodyClean st
 		if strings.Contains(v.Info.Sender.User, session.SenderID) {
 			delete(ttSearchCache, qID)
 			if idx, err := strconv.Atoi(bodyClean); err == nil && idx > 0 && idx <= len(session.Results) {
-				go downloadViaAPI(client, v, session.Results[idx-1].Url, "mp4", false)
+				go downloadViaAPI(client, v, session.Results[idx-1].URL, "mp4", false)
 			}
 			return true
 		}
