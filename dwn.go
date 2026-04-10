@@ -686,7 +686,7 @@ func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	react(client, v.Info.Chat, v.Info.ID, "🔍")
 
 	// Python Script چلائیں
-	cmd := exec.Command("python3", "tiktok_nav.py", query)
+	cmd := exec.Command("python3", "tiktok_search.py", query)
 	out, err := cmd.CombinedOutput()
 	
 	// 🔥 DEBUG PRINT (دوسرے بوٹ میں بھی یہ لگا لو، زندگی آسان رہے گی)
