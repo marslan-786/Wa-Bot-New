@@ -45,78 +45,95 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 		return
 	}
 
-	// 2. سرچ کوئری سیٹ کریں (ڈیفالٹ یا یوزر کی دی ہوئی)
+	// 2. سرچ کوئری سیٹ کریں
 	searchQuery := "lofi instrumental no copyright"
 	if args != "" {
 		searchQuery = args + " instrumental no copyright"
 	}
 
-	// ڈاؤنلوڈ اینیمیشن شروع کریں
+	fmt.Printf("\n===================================================\n")
+	fmt.Printf("🎧 [MUSIC MIXER] PROCESS STARTED\n")
+	fmt.Printf("===================================================\n")
+	fmt.Printf("🔍 1. Search Query: '%s'\n", searchQuery)
+
 	react(client, v.Info.Chat, v.Info.ID, "⏳")
 
-	// 3. عارضی فائل نیمز
 	timestamp := time.Now().UnixNano()
 	voiceFile := fmt.Sprintf("voice_%d.ogg", timestamp)
 	musicFile := fmt.Sprintf("music_%d.mp3", timestamp)
 	finalFile := fmt.Sprintf("final_%d.ogg", timestamp)
 
-	// فائلیں خود بخود ڈیلیٹ کرنے کے لیے
 	defer func() {
 		os.Remove(voiceFile)
 		os.Remove(musicFile)
 		os.Remove(finalFile)
 	}()
 
-	// ==========================================
-	// 🎙️ STEP A: یوزر کی وائس ڈاؤن لوڈ کریں
-	// ==========================================
+	// STEP A: وائس ڈاؤن لوڈ کریں
 	audioData, err := client.Download(context.Background(), audioMsg)
 	if err != nil {
+		fmt.Printf("❌ [MUSIC] Voice Download Error: %v\n", err)
 		replyMessage(client, v, "❌ *Error:* Failed to download your voice note.")
 		return
 	}
 	os.WriteFile(voiceFile, audioData, 0644)
+	fmt.Printf("✅ 2. User Voice Downloaded successfully.\n")
 
-	// ==========================================
-	// 🎵 STEP B: یوٹیوب سے میوزک سرچ اور ڈاؤن لوڈ (آپ کی ڈائریکٹ API)
-	// ==========================================
-	// YT-DLP سے صرف ID نکالیں
+	// STEP B: YT-DLP سرچ
 	cmd := exec.Command("yt-dlp", "ytsearch1:"+searchQuery, "--flat-playlist", "--print", "id")
 	out, err := cmd.CombinedOutput()
 	if err != nil || len(out) == 0 {
-		replyMessage(client, v, "❌ *Error:* Failed to find background music.")
+		fmt.Printf("❌ [MUSIC] YT-DLP Error: %v\nOutput: %s\n", err, string(out))
+		replyMessage(client, v, "❌ *Error:* Failed to find background music via YouTube.")
 		return
 	}
 
 	vidID := strings.TrimSpace(strings.Split(string(out), "\n")[0])
 	ytUrl := "https://www.youtube.com/watch?v=" + vidID
+	fmt.Printf("🔗 3. Found YouTube URL: %s\n", ytUrl)
 
-	// 🔥 آپ کی اپنی API ہٹ کر رہے ہیں
+	// STEP C: API ہٹ کریں
 	apiUrl := fmt.Sprintf("https://silent-yt-dwn.up.railway.app/api/download?url=%s&resolution=mp3", url.QueryEscape(ytUrl))
+	fmt.Printf("🌐 4. Hitting API: %s\n", apiUrl)
 	
 	apiResp, err := http.Get(apiUrl)
 	if err != nil {
+		fmt.Printf("❌ [MUSIC] API Network Error: %v\n", err)
 		replyMessage(client, v, "❌ *Error:* Failed to connect to Silent API.")
 		return
 	}
 	defer apiResp.Body.Close()
 
-	// JSON ڈیٹا پارس کریں
-	var apiData SilentMusicAPIResponse
-	if err := json.NewDecoder(apiResp.Body).Decode(&apiData); err != nil {
-		replyMessage(client, v, "❌ *Error:* Invalid API Response.")
+	// 🔥 یہ ہے اصل گیم: API کا کچا چٹھا (RAW DATA) پرنٹ کرنا
+	bodyBytes, err := io.ReadAll(apiResp.Body)
+	if err != nil {
+		fmt.Printf("❌ [MUSIC] Failed to read API body: %v\n", err)
+		replyMessage(client, v, "❌ *Error:* Failed to read API response.")
 		return
 	}
 
-	// چیک کریں کہ API نے success دیا ہے یا نہیں
+	fmt.Printf("📦 5. RAW API RESPONSE:\n%s\n", string(bodyBytes))
+
+	// اب JSON کو پارس کریں
+	var apiData SilentMusicAPIResponse
+	if err := json.Unmarshal(bodyBytes, &apiData); err != nil {
+		fmt.Printf("❌ [MUSIC] JSON Parse Error: %v\n", err)
+		replyMessage(client, v, "❌ *Error:* API Response is not valid JSON.")
+		return
+	}
+
 	if !apiData.Success || apiData.DownloadURL == "" {
+		fmt.Printf("❌ [MUSIC] API Success is False OR DownloadURL is empty!\n")
 		replyMessage(client, v, "❌ *Error:* Failed to extract direct download link.")
 		return
 	}
+	
+	fmt.Printf("✅ 6. Extracted Audio Download URL: %s\n", apiData.DownloadURL)
 
-	// ⚡ اصل MP3 فائل ڈاؤن لوڈ کریں
+	// STEP D: اصل MP3 ڈاؤن لوڈ کریں
 	musicResp, err := http.Get(apiData.DownloadURL)
 	if err != nil {
+		fmt.Printf("❌ [MUSIC] MP3 Download Network Error: %v\n", err)
 		replyMessage(client, v, "❌ *Error:* Failed to fetch music file.")
 		return
 	}
@@ -124,18 +141,18 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 
 	mFile, err := os.Create(musicFile)
 	if err != nil {
+		fmt.Printf("❌ [MUSIC] Failed to create local mp3 file: %v\n", err)
 		replyMessage(client, v, "❌ *System Error:* Could not create music file.")
 		return
 	}
 	io.Copy(mFile, musicResp.Body)
 	mFile.Close()
+	fmt.Printf("✅ 7. MP3 Downloaded and Saved successfully.\n")
 
-	react(client, v.Info.Chat, v.Info.ID, "🎛️") // مکسنگ کا اشارہ
+	react(client, v.Info.Chat, v.Info.ID, "🎛️") 
 
-	// ==========================================
-	// 🎚️ STEP C: FFmpeg VIP مکسنگ
-	// ==========================================
-	// filter: آواز میں ہلکی تھرتھراہٹ (vibrato)، گونج (aecho)، اور میوزک کی آواز کم (volume=0.2)
+	// STEP E: FFmpeg مکسنگ
+	fmt.Printf("🎚️ 8. Starting FFmpeg Mixing...\n")
 	filter := "[0:a]vibrato=f=4:d=0.2, aecho=0.8:0.88:40:0.3, volume=1.8[v]; [1:a]volume=0.15, lowpass=f=3000[bg]; [v][bg]amix=inputs=2:duration=first"
 
 	mixCmd := exec.Command("ffmpeg", "-y",
@@ -147,28 +164,30 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 		"-vbr", "on",
 		finalFile)
 
-	err = mixCmd.Run()
+	mixOut, err := mixCmd.CombinedOutput()
 	if err != nil {
+		fmt.Printf("❌ [MUSIC] FFmpeg Error: %v\nOutput: %s\n", err, string(mixOut))
 		replyMessage(client, v, "❌ *Processing Error:* Failed to mix audio.")
 		return
 	}
+	fmt.Printf("✅ 9. FFmpeg Mixing Complete!\n")
 
-	// ==========================================
-	// 📤 STEP D: فائنل آڈیو کو واٹس ایپ پر بھیجیں
-	// ==========================================
+	// STEP F: واٹس ایپ پر اپلوڈ
 	finalData, err := os.ReadFile(finalFile)
 	if err != nil {
+		fmt.Printf("❌ [MUSIC] Failed to read final.ogg: %v\n", err)
 		replyMessage(client, v, "❌ *Error:* Could not read final file.")
 		return
 	}
 
 	uploaded, err := client.Upload(context.Background(), finalData, whatsmeow.MediaAudio)
 	if err != nil {
+		fmt.Printf("❌ [MUSIC] WhatsApp Upload Error: %v\n", err)
 		replyMessage(client, v, "❌ *Upload Error:* Failed to upload to WhatsApp.")
 		return
 	}
+	fmt.Printf("✅ 10. Uploaded to WhatsApp successfully. Sending message...\n")
 
-	// بطور PTT (وائس نوٹ) ریپلائی کریں
 	ptt := true
 	client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
 		AudioMessage: &waProto.AudioMessage{
@@ -190,4 +209,6 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 	})
 
 	react(client, v.Info.Chat, v.Info.ID, "✅")
+	fmt.Printf("🎉 [MUSIC MIXER] PROCESS FINISHED SUCCESSFULLY!\n")
+	fmt.Printf("===================================================\n\n")
 }
