@@ -372,6 +372,10 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		react(client, v.Info.Chat, v.Info.ID, "✨")
 		go handleFancy(client, v, fullArgs)
 		
+	case "music":
+		react(client, v.Info.Chat, v.Info.ID, "🎧")
+		go handleMusicMixer(client, v, fullArgs)
+		
 		
 	case "id":
 		react(client, v.Info.Chat, v.Info.ID, "🪪")
