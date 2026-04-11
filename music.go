@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -15,6 +17,16 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 )
+
+// ==========================================
+// 🚀 API RESPONSE STRUCT
+// ==========================================
+type SilentMusicAPIResponse struct {
+	Success     bool   `json:"success"`
+	Title       string `json:"title"`
+	Resolution  string `json:"resolution"`
+	DownloadURL string `json:"download_url"`
+}
 
 // ==========================================
 // 🎧 THE VIP MUSIC MIXER ENGINE
@@ -66,7 +78,7 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 	os.WriteFile(voiceFile, audioData, 0644)
 
 	// ==========================================
-	// 🎵 STEP B: یوٹیوب سے میوزک سرچ اور ڈاؤن لوڈ (آپ کی API کے ذریعے)
+	// 🎵 STEP B: یوٹیوب سے میوزک سرچ اور ڈاؤن لوڈ (آپ کی ڈائریکٹ API)
 	// ==========================================
 	// YT-DLP سے صرف ID نکالیں
 	cmd := exec.Command("yt-dlp", "ytsearch1:"+searchQuery, "--flat-playlist", "--print", "id")
@@ -79,33 +91,49 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 	vidID := strings.TrimSpace(strings.Split(string(out), "\n")[0])
 	ytUrl := "https://www.youtube.com/watch?v=" + vidID
 
-	// آپ کا کسٹم فنکشن کال کر کے ڈاؤنلوڈ لنک نکالیں
-	_, dlLink, err := extractVidsSaveURL(ytUrl, "audio")
-	if err != nil || dlLink == "" {
-		replyMessage(client, v, "❌ *Error:* Failed to extract music via API.")
+	// 🔥 آپ کی اپنی API ہٹ کر رہے ہیں
+	apiUrl := fmt.Sprintf("https://silent-yt-dwn.up.railway.app/api/download?url=%s&resolution=mp3", url.QueryEscape(ytUrl))
+	
+	apiResp, err := http.Get(apiUrl)
+	if err != nil {
+		replyMessage(client, v, "❌ *Error:* Failed to connect to Silent API.")
+		return
+	}
+	defer apiResp.Body.Close()
+
+	// JSON ڈیٹا پارس کریں
+	var apiData SilentMusicAPIResponse
+	if err := json.NewDecoder(apiResp.Body).Decode(&apiData); err != nil {
+		replyMessage(client, v, "❌ *Error:* Invalid API Response.")
 		return
 	}
 
-	// میوزک فائل ڈاؤن لوڈ کریں
-	resp, err := http.Get(dlLink)
+	// چیک کریں کہ API نے success دیا ہے یا نہیں
+	if !apiData.Success || apiData.DownloadURL == "" {
+		replyMessage(client, v, "❌ *Error:* Failed to extract direct download link.")
+		return
+	}
+
+	// ⚡ اصل MP3 فائل ڈاؤن لوڈ کریں
+	musicResp, err := http.Get(apiData.DownloadURL)
 	if err != nil {
 		replyMessage(client, v, "❌ *Error:* Failed to fetch music file.")
 		return
 	}
-	defer resp.Body.Close()
+	defer musicResp.Body.Close()
 
 	mFile, err := os.Create(musicFile)
 	if err != nil {
 		replyMessage(client, v, "❌ *System Error:* Could not create music file.")
 		return
 	}
-	io.Copy(mFile, resp.Body)
+	io.Copy(mFile, musicResp.Body)
 	mFile.Close()
 
 	react(client, v.Info.Chat, v.Info.ID, "🎛️") // مکسنگ کا اشارہ
 
 	// ==========================================
-	// 🎚️ STEP C: FFmpeg VIP مکسنگ (Vibrato + Echo)
+	// 🎚️ STEP C: FFmpeg VIP مکسنگ
 	// ==========================================
 	// filter: آواز میں ہلکی تھرتھراہٹ (vibrato)، گونج (aecho)، اور میوزک کی آواز کم (volume=0.2)
 	filter := "[0:a]vibrato=f=4:d=0.2, aecho=0.8:0.88:40:0.3, volume=1.8[v]; [1:a]volume=0.15, lowpass=f=3000[bg]; [v][bg]amix=inputs=2:duration=first"
