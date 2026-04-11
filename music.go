@@ -29,7 +29,7 @@ type SilentMusicAPIResponse struct {
 }
 
 // ==========================================
-// 🎧 THE VIP MUSIC MIXER ENGINE
+// 🎧 THE VIP MUSIC MIXER ENGINE (STUDIO EDITION)
 // ==========================================
 func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) {
 	// 1. چیک کریں کہ کسی میسج کا رپلائی کیا ہے
@@ -45,31 +45,35 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 		return
 	}
 
-	// 2. سرچ کوئری سیٹ کریں
-	searchQuery := "lofi instrumental no copyright"
+	// 2. سرچ کوئری سیٹ کریں (خالص سونگ / بیٹ والی فیل کے لیے)
+	searchQuery := "slowed reverb sad song beat instrumental short"
 	if args != "" {
-		searchQuery = args + " instrumental no copyright"
+		searchQuery = args + " song beat instrumental slowed reverb short"
 	}
 
 	fmt.Printf("\n===================================================\n")
-	fmt.Printf("🎧 [MUSIC MIXER] PROCESS STARTED\n")
+	fmt.Printf("🎧 [MUSIC MIXER] STUDIO PROCESS STARTED\n")
 	fmt.Printf("===================================================\n")
 	fmt.Printf("🔍 1. Search Query: '%s'\n", searchQuery)
 
 	react(client, v.Info.Chat, v.Info.ID, "⏳")
 
+	// 3. عارضی فائل نیمز
 	timestamp := time.Now().UnixNano()
 	voiceFile := fmt.Sprintf("voice_%d.ogg", timestamp)
 	musicFile := fmt.Sprintf("music_%d.mp3", timestamp)
 	finalFile := fmt.Sprintf("final_%d.ogg", timestamp)
 
+	// فائلیں خود بخود ڈیلیٹ کرنے کے لیے
 	defer func() {
 		os.Remove(voiceFile)
 		os.Remove(musicFile)
 		os.Remove(finalFile)
 	}()
 
-	// STEP A: وائس ڈاؤن لوڈ کریں
+	// ==========================================
+	// 🎙️ STEP A: یوزر کی وائس ڈاؤن لوڈ کریں
+	// ==========================================
 	audioData, err := client.Download(context.Background(), audioMsg)
 	if err != nil {
 		fmt.Printf("❌ [MUSIC] Voice Download Error: %v\n", err)
@@ -79,20 +83,31 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 	os.WriteFile(voiceFile, audioData, 0644)
 	fmt.Printf("✅ 2. User Voice Downloaded successfully.\n")
 
-	// STEP B: YT-DLP سرچ
-	cmd := exec.Command("yt-dlp", "ytsearch1:"+searchQuery, "--flat-playlist", "--print", "id")
+	// ==========================================
+	// 🎵 STEP B: یوٹیوب سے میوزک سرچ (صرف شارٹ ویڈیوز)
+	// ==========================================
+	// فلٹر لگا ہوا ہے کہ 5 منٹ سے چھوٹی ویڈیو لے کر آئے تاکہ API ٹائم آؤٹ نہ ہو۔
+	cmd := exec.Command("yt-dlp", "ytsearch5:"+searchQuery, "--match-filter", "duration < 300", "--flat-playlist", "--print", "id")
 	out, err := cmd.CombinedOutput()
 	if err != nil || len(out) == 0 {
 		fmt.Printf("❌ [MUSIC] YT-DLP Error: %v\nOutput: %s\n", err, string(out))
-		replyMessage(client, v, "❌ *Error:* Failed to find background music via YouTube.")
+		replyMessage(client, v, "❌ *Error:* Failed to find a short background music track.")
 		return
 	}
 
-	vidID := strings.TrimSpace(strings.Split(string(out), "\n")[0])
-	ytUrl := "https://www.youtube.com/watch?v=" + vidID
-	fmt.Printf("🔗 3. Found YouTube URL: %s\n", ytUrl)
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 0 || lines[0] == "" {
+		replyMessage(client, v, "❌ *Error:* No short music found under 5 minutes.")
+		return
+	}
 
-	// STEP C: API ہٹ کریں
+	vidID := strings.TrimSpace(lines[0])
+	ytUrl := "https://www.youtube.com/watch?v=" + vidID
+	fmt.Printf("🔗 3. Found YouTube URL (Under 5 mins): %s\n", ytUrl)
+
+	// ==========================================
+	// 🌐 STEP C: آپ کی API سے ڈائریکٹ ڈاؤنلوڈ لنک نکالنا
+	// ==========================================
 	apiUrl := fmt.Sprintf("https://silent-yt-dwn.up.railway.app/api/download?url=%s&resolution=mp3", url.QueryEscape(ytUrl))
 	fmt.Printf("🌐 4. Hitting API: %s\n", apiUrl)
 	
@@ -104,7 +119,6 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 	}
 	defer apiResp.Body.Close()
 
-	// 🔥 یہ ہے اصل گیم: API کا کچا چٹھا (RAW DATA) پرنٹ کرنا
 	bodyBytes, err := io.ReadAll(apiResp.Body)
 	if err != nil {
 		fmt.Printf("❌ [MUSIC] Failed to read API body: %v\n", err)
@@ -114,7 +128,6 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 
 	fmt.Printf("📦 5. RAW API RESPONSE:\n%s\n", string(bodyBytes))
 
-	// اب JSON کو پارس کریں
 	var apiData SilentMusicAPIResponse
 	if err := json.Unmarshal(bodyBytes, &apiData); err != nil {
 		fmt.Printf("❌ [MUSIC] JSON Parse Error: %v\n", err)
@@ -130,7 +143,9 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 	
 	fmt.Printf("✅ 6. Extracted Audio Download URL: %s\n", apiData.DownloadURL)
 
-	// STEP D: اصل MP3 ڈاؤن لوڈ کریں
+	// ==========================================
+	// 📥 STEP D: اصل MP3 ڈاؤن لوڈ کریں
+	// ==========================================
 	musicResp, err := http.Get(apiData.DownloadURL)
 	if err != nil {
 		fmt.Printf("❌ [MUSIC] MP3 Download Network Error: %v\n", err)
@@ -151,9 +166,12 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 
 	react(client, v.Info.Chat, v.Info.ID, "🎛️") 
 
-	// STEP E: FFmpeg مکسنگ
-	fmt.Printf("🎚️ 8. Starting FFmpeg Mixing...\n")
-	filter := "[0:a]vibrato=f=4:d=0.2, aecho=0.8:0.88:40:0.3, volume=1.8[v]; [1:a]volume=0.15, lowpass=f=3000[bg]; [v][bg]amix=inputs=2:duration=first"
+	// ==========================================
+	// 🎚️ STEP E: FFmpeg VIP مکسنگ (HIGH BASS, ECHO & VIBRATO)
+	// ==========================================
+	fmt.Printf("🎚️ 8. Starting FFmpeg Mixing (High Bass & Echo)...\n")
+	
+	filter := "[0:a]bass=g=15:f=110, treble=g=5:f=3000, vibrato=f=5:d=0.6, aecho=0.8:0.9:300:0.6, volume=2.5[v]; [1:a]volume=0.35, lowpass=f=4000[bg]; [v][bg]amix=inputs=2:duration=first"
 
 	mixCmd := exec.Command("ffmpeg", "-y",
 		"-i", voiceFile,
@@ -172,7 +190,9 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 	}
 	fmt.Printf("✅ 9. FFmpeg Mixing Complete!\n")
 
-	// STEP F: واٹس ایپ پر اپلوڈ
+	// ==========================================
+	// 📤 STEP F: فائنل آڈیو کو واٹس ایپ پر بھیجیں (As PTT)
+	// ==========================================
 	finalData, err := os.ReadFile(finalFile)
 	if err != nil {
 		fmt.Printf("❌ [MUSIC] Failed to read final.ogg: %v\n", err)
