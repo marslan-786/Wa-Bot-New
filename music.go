@@ -171,7 +171,8 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 	// ==========================================
 	fmt.Printf("🎚️ 8. Starting FFmpeg Mixing (High Bass & Echo)...\n")
 	
-	filter := "[0:a]bass=g=15:f=110, treble=g=5:f=3000, vibrato=f=5:d=0.6, aecho=0.8:0.9:300:0.6, volume=2.5[v]; [1:a]volume=0.35, lowpass=f=4000[bg]; [v][bg]amix=inputs=2:duration=first"
+	filter := "[0:a]bass=g=7:f=110, treble=g=5:f=3000, vibrato=f=4:d=0.3, aecho=0.8:0.4:250:0.3, volume=1.8[v]; [1:a]volume=0.2, lowpass=f=3500[bg]; [v][bg]amix=inputs=2:duration=first"
+
 
 	mixCmd := exec.Command("ffmpeg", "-y",
 		"-i", voiceFile,
