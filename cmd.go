@@ -155,10 +155,11 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	}
 
 	// 📖 Auto Read & Auto React (بیک گراؤنڈ میں)
-	go func() {
-		if settings.AutoRead {
-			client.MarkRead(context.Background(), []types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
-		}
+    go func() {
+	// Checks if AutoRead is enabled AND the message is NOT sent by you
+    	if settings.AutoRead && !v.Info.IsFromMe {
+    		client.MarkRead(context.Background(), []types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
+    	}
 
         if settings.AutoReact {
     
