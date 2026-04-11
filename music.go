@@ -45,11 +45,12 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 		return
 	}
 
-	// 2. سرچ کوئری سیٹ کریں (خالص سونگ / بیٹ والی فیل کے لیے)
-	searchQuery := "slowed reverb sad song beat instrumental short"
+	// 2. سرچ کوئری (خالص پیانو اور ڈھول/بیٹ، بغیر کسی سنگر کی آواز کے)
+	searchQuery := "pure piano and emotional trap beat instrumental no vocals short"
 	if args != "" {
-		searchQuery = args + " song beat instrumental slowed reverb short"
+		searchQuery = args + " instrumental pure beat no vocals short"
 	}
+
 
 	fmt.Printf("\n===================================================\n")
 	fmt.Printf("🎧 [MUSIC MIXER] STUDIO PROCESS STARTED\n")
@@ -170,8 +171,14 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 	// 🎚️ STEP E: FFmpeg VIP مکسنگ (HIGH BASS, ECHO & VIBRATO)
 	// ==========================================
 	fmt.Printf("🎚️ 8. Starting FFmpeg Mixing (High Bass & Echo)...\n")
+	// 🔥 VIP Chorus Filter:
+	// bass=g=12 -> آواز مزید بھاری
+	// chorus=0.6:0.9:40|60|80... -> یہ 3 مزید مختلف آوازیں پیدا کرے گا (ٹوٹل 4 بندوں کی فیل)
+	// aecho -> گونج برقرار رکھی ہے
+	// volume=0.25 (Music) -> میوزک کو تھوڑا اوپر کیا ہے تاکہ پیانو اور بیٹس سنائی دیں
 	
-	filter := "[0:a]bass=g=7:f=110, treble=g=5:f=3000, vibrato=f=4:d=0.3, aecho=0.8:0.4:250:0.3, volume=3.5[v]; [1:a]volume=0.15, lowpass=f=3500[bg]; [v][bg]amix=inputs=2:duration=first"
+	filter := "[0:a]bass=g=12:f=110, treble=g=5:f=3000, chorus=0.6:0.9:40|60|80:0.4|0.4|0.3:0.25|0.4|0.3:2|2.5|3, aecho=0.8:0.4:250:0.3, volume=3.5[v]; [1:a]volume=0.25, lowpass=f=4000[bg]; [v][bg]amix=inputs=2:duration=first"
+
 
 
 	mixCmd := exec.Command("ffmpeg", "-y",
