@@ -64,13 +64,27 @@ const SafeMarginMB = 1800.0
 // 🚀 1. API DOWNLOADER (For YT & TikTok)
 // ===================/=======================
 // 1️⃣ TIER 1: API DOWNLOAD FUNCTION
+// 1️⃣ TIER 1: API DOWNLOAD FUNCTION
 func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, resolution string, isAudio bool) {
 	// ==========================================
-	// 🛑 URL VALIDATION CHECK
+	// 🛑 URL VALIDATION & CONVERSION
 	// ==========================================
 	if !strings.Contains(targetUrl, "http") {
-		replyMessage(client, v, "⚠️(Please provide a valid link)")
+		replyMessage(client, v, "⚠️ Please provide a valid link.")
 		return
+	}
+
+	// 🔧 یوٹیوب لنک کنورٹر (youtube.com/watch -> youtu.be)
+	if strings.Contains(targetUrl, "youtube.com/watch") {
+		parsedUrl, err := url.Parse(targetUrl)
+		if err == nil {
+			videoID := parsedUrl.Query().Get("v")
+			if videoID != "" {
+				// لنک کو شارٹ فارمیٹ میں بدل دیا
+				targetUrl = fmt.Sprintf("https://youtu.be/%s", videoID)
+				fmt.Printf("🔧 https://www.collinsdictionary.com/us/dictionary/english/convert: %s\n", targetUrl)
+			}
+		}
 	}
 
 	// ==========================================
@@ -153,6 +167,7 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 		return
 	}
 
+	// اگر یہاں تک آ گیا تو مطلب API پاس ہو گئی ہے
 	fileResp, err := httpClient.Get(apiRes.DownloadURL)
 	if err != nil { 
 		fmt.Printf("\n❌ [FILE DOWNLOAD ERROR]: %v\n", err)
