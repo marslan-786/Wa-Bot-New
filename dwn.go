@@ -63,7 +63,16 @@ const SafeMarginMB = 1800.0
 // ==========================================
 // 🚀 1. API DOWNLOADER (For YT & TikTok)
 // ===================/=======================
+// 1️⃣ TIER 1: API DOWNLOAD FUNCTION
 func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, resolution string, isAudio bool) {
+	// ==========================================
+	// 🛑 URL VALIDATION CHECK
+	// ==========================================
+	if !strings.Contains(targetUrl, "http") {
+		replyMessage(client, v, "⚠️(Please provide a valid link)")
+		return
+	}
+
 	// ==========================================
 	// 🌀 DYNAMIC REACTION ANIMATION (Loading State)
 	// ==========================================
@@ -95,7 +104,7 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	}()
 	// ==========================================
 
-	// 🔄 FALLBACK LOGIC
+	// 🔄 FALLBACK LOGIC -> Goes to Tier 2 (downloadAndSend)
 	executeFallback := func() {
 		stopAnim() 
 		mode := "video"
@@ -129,7 +138,6 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	var apiRes APIResponse
 	err = json.Unmarshal(bodyBytes, &apiRes)
 
-	// اگر API نے رسپانس غلط دیا، یا Success false ہے، یا ڈونلوڈ لنک نہیں ہے
 	if err != nil || !apiRes.Success || apiRes.DownloadURL == "" {
 		fmt.Printf("\n======================================================\n")
 		fmt.Printf("⚠️ [API FAILED - PRINTING RAW RESPONSE (KACHA CHITHA)] ⚠️\n")
@@ -137,16 +145,14 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 		if err != nil {
 			fmt.Printf("👉 JSON Parse Error: %v\n", err)
 		}
-		// 🔥 یہ رہا وہ کچا چٹھا جو API نے پیچھے سے بھیجا ہے!
 		fmt.Printf("👉 Raw Response: %s\n", string(bodyBytes)) 
-		fmt.Printf("🔄 Now triggering executeFallback()...\n")
+		fmt.Printf("🔄 Now triggering executeFallback() -> Tier 2...\n")
 		fmt.Printf("======================================================\n\n")
 		
 		executeFallback()
 		return
 	}
 
-	// اگر یہاں تک آ گیا تو مطلب API پاس ہو گئی ہے
 	fileResp, err := httpClient.Get(apiRes.DownloadURL)
 	if err != nil { 
 		fmt.Printf("\n❌ [FILE DOWNLOAD ERROR]: %v\n", err)
@@ -205,11 +211,17 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 }
 
 
-
+// 2️⃣ TIER 2: INTERNAL SCRAPER FUNCTION
 func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mode string, optionalFormat ...string) {
 	// ==========================================
 	// 🌀 DYNAMIC REACTION ANIMATION (Loading State)
 	// ==========================================
+	
+	if !strings.Contains(targetUrl, "http") {
+		replyMessage(client, v, "⚠️(Please provide a valid link)")
+		return
+	}
+	
 	doneAnim := make(chan bool)
 	animating := true
 
@@ -240,14 +252,18 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 
 	isAudio := mode == "audio"
 
-	// 1. ڈائریکٹ اپنا انٹرنل اسکریپر فنکشن کال کرو (بغیر کسی تبدیلی کے)
-	fmt.Printf("\n📥 [INTERNAL SCRAPER] Sending raw link: %s\n", targetUrl) // کچا لنک پرنٹ کریں
+	// 🔄 FALLBACK LOGIC -> Goes to Tier 3 (yt-dlp)
+	fallbackToYtDlp := func() {
+		stopAnim()
+		fmt.Printf("🔄 Falling back to Tier-3 (yt-dlp)...\n")
+		downloadViaYtDlp(client, v, targetUrl, isAudio)
+	}
+
+	fmt.Printf("\n📥 [INTERNAL SCRAPER] Sending raw link: %s\n", targetUrl) 
 	
 	title, downloadURL, err := extractVidsSaveURL(targetUrl, mode)
 	
 	if err != nil || downloadURL == "" {
-		stopAnim()
-		// 🔴 اگر فیل ہوا تو یہاں پورا کچا چٹھا پرنٹ ہوگا
 		fmt.Printf("\n========================================\n")
 		fmt.Printf("❌ [EXTRACTION ERROR IN downloadAndSend]\n")
 		fmt.Printf("👉 Input URL: %s\n", targetUrl)
@@ -255,21 +271,18 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 		fmt.Printf("👉 Result URL: '%s'\n", downloadURL)
 		fmt.Printf("========================================\n\n")
 
-		replyMessage(client, v, "❌ *Download Failed:* System could not extract this link.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		// 🔴 یوزر کو رپلائی دینے کی بجائے اب یہ Tier 3 پر جائے گا
+		fallbackToYtDlp()
 		return
 	}
 
 	httpClient := &http.Client{Timeout: 5 * time.Minute}
 
-	// 2. فائل ڈاؤنلوڈ کرنا شروع کریں
 	fmt.Printf("🌐 [STREAMING] Downloading from: %s\n", downloadURL)
 	fileResp, err := httpClient.Get(downloadURL)
 	if err != nil { 
-		stopAnim()
 		fmt.Printf("❌ [STREAM ERROR]: %v\n", err)
-		replyMessage(client, v, "❌ *Error:* Failed to stream media from server.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		fallbackToYtDlp()
 		return 
 	}
 	defer fileResp.Body.Close()
@@ -279,31 +292,27 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 	tempFileName := fmt.Sprintf("./data/temp_%d%s", time.Now().UnixNano(), ext)
 	
 	outFile, err := os.Create(tempFileName)
-	if err != nil { stopAnim(); react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	if err != nil { fallbackToYtDlp(); return }
 	
 	_, err = io.Copy(outFile, fileResp.Body)
 	outFile.Close()
 
 	if err != nil { 
 		os.Remove(tempFileName)
-		stopAnim()
 		fmt.Printf("❌ [SAVE ERROR]: %v\n", err)
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		fallbackToYtDlp()
 		return 
 	}
 
 	defer os.Remove(tempFileName)
 
-	// 3. سائز چیک کریں
 	fileInfo, err := os.Stat(tempFileName)
-	if err != nil { stopAnim(); react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+	if err != nil { fallbackToYtDlp(); return }
 	
 	fileSize := fileInfo.Size()
 	fmt.Printf("✅ [DOWNLOADED] File Size: %.2f MB\n", float64(fileSize)/(1024*1024))
 
 	var filesToSend []string
-
-	// 🔥 ڈاؤن لوڈ مکمل! اینیمیشن روک دیں
 	stopAnim()
 
 	if fileSize > int64(MaxWhatsAppSize) && !isAudio {
@@ -320,7 +329,6 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 
 	react(client, v.Info.Chat, v.Info.ID, "📤")
 
-	// 4. فائنل سینڈنگ
 	for i, filePath := range filesToSend {
 		uploadAndSendFile(client, v, filePath, title, isAudio, i+1, len(filesToSend))
 		if filePath != tempFileName {
@@ -330,6 +338,126 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 
 	react(client, v.Info.Chat, v.Info.ID, "✅")
 	fmt.Printf("🎉 [COMPLETED] Successfully sent to user.\n")
+}
+
+
+// 3️⃣ TIER 3: YT-DLP FALLBACK (NEW FUNCTION)
+func downloadViaYtDlp(client *whatsmeow.Client, v *events.Message, targetUrl string, isAudio bool) {
+	// ==========================================
+	// 🌀 DYNAMIC REACTION ANIMATION
+	// ==========================================
+	doneAnim := make(chan bool)
+	animating := true
+
+	stopAnim := func() {
+		if animating {
+			close(doneAnim)
+			animating = false
+		}
+	}
+	defer stopAnim()
+
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		emojis := []string{"🤖", "⚙️", "🔧", "⏳"} // Thora different animation for yt-dlp
+		i := 0
+		for {
+			select {
+			case <-doneAnim:
+				return
+			case <-ticker.C:
+				react(client, v.Info.Chat, v.Info.ID, emojis[i%len(emojis)])
+				i++
+			}
+		}
+	}()
+	// ==========================================
+
+	// Unique ID file ke liye
+	fileID := fmt.Sprintf("ytdlp_%d", time.Now().UnixNano())
+	outputTemplate := fmt.Sprintf("./data/%s.%%(ext)s", fileID)
+
+	formatArgs := "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+	if isAudio {
+		formatArgs = "bestaudio/best"
+	}
+
+	// yt-dlp command setup (Android Spoofing)
+	cmd := exec.Command("yt-dlp",
+		targetUrl,
+		"--user-agent", "Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36",
+		"--add-header", `Sec-CH-UA-Platform: "Android"`,
+		"--add-header", "Sec-CH-UA-Mobile: ?1",
+		"--add-header", "Accept-Language: en-US,en;q=0.9",
+		"--extractor-args", "youtube:player_client=android",
+		"--format", formatArgs,
+		"--output", outputTemplate,
+	)
+
+	fmt.Printf("🚀 [YT-DLP] Executing command for URL: %s\n", targetUrl)
+	err := cmd.Run()
+
+	if err != nil {
+		stopAnim()
+		fmt.Printf("❌ [YT-DLP ERROR]: %v\n", err)
+		// 🔴 FINAL FAILURE: یوزر کو صرف یہاں ایرر میسج جائے گا
+		replyMessage(client, v, "❌ *Download Failed:* System could not process this link.")
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return
+	}
+
+	// چونکہ yt-dlp اپنی مرضی کی extension لگاتا ہے (mp4, webm, m4a), ہم fileGlob سے ڈھونڈیں گے
+	matches, err := filepath.Glob(fmt.Sprintf("./data/%s.*", fileID))
+	if err != nil || len(matches) == 0 {
+		stopAnim()
+		fmt.Printf("❌ [YT-DLP FILE ERROR]: File not found after download.\n")
+		replyMessage(client, v, "❌ *Download Failed:* System could not process this link.")
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return
+	}
+
+	downloadedFile := matches[0] // پہلی میچ ہونے والی فائل
+	defer os.Remove(downloadedFile)
+
+	fileInfo, err := os.Stat(downloadedFile)
+	if err != nil {
+		stopAnim()
+		replyMessage(client, v, "❌ *Download Failed:* Error reading file.")
+		react(client, v.Info.Chat, v.Info.ID, "❌")
+		return
+	}
+
+	fileSize := fileInfo.Size()
+	fmt.Printf("✅ [YT-DLP DOWNLOADED] File Size: %.2f MB\n", float64(fileSize)/(1024*1024))
+
+	var filesToSend []string
+	stopAnim()
+
+	if fileSize > int64(MaxWhatsAppSize) && !isAudio {
+		react(client, v.Info.Chat, v.Info.ID, "✂️")
+		parts, err := splitVideoSmart(downloadedFile, SafeMarginMB)
+		if err != nil || len(parts) == 0 {
+			filesToSend = append(filesToSend, downloadedFile)
+		} else {
+			filesToSend = parts
+		}
+	} else {
+		filesToSend = append(filesToSend, downloadedFile)
+	}
+
+	react(client, v.Info.Chat, v.Info.ID, "📤")
+
+	title := "Downloaded Media" // yt-dlp se default title de rahe hain
+	for i, filePath := range filesToSend {
+		uploadAndSendFile(client, v, filePath, title, isAudio, i+1, len(filesToSend))
+		if filePath != downloadedFile {
+			os.Remove(filePath)
+		}
+	}
+
+	react(client, v.Info.Chat, v.Info.ID, "✅")
+	fmt.Printf("🎉 [YT-DLP COMPLETED] Successfully sent to user.\n")
 }
 
 
