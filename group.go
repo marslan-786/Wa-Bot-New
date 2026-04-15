@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
@@ -27,6 +28,82 @@ func initGroupDB() {
 		antidelete BOOLEAN DEFAULT 0
 	);`
 	settingsDB.Exec(createTableQuery) 
+}
+
+var linkWarnings = make(map[string]int)
+var warningMutex sync.Mutex
+
+func checkAntiLink(client *whatsmeow.Client, v *events.Message, body string) bool {
+	// اگر پرائیویٹ میسج ہے، آپ کا اپنا میسج ہے، یا بھیجنے والا ایڈمن ہے تو اگنور کریں
+	if !v.Info.IsGroup || v.Info.IsFromMe || isGroupAdmin(client, v) { return false }
+
+	// لنکس کی پہچان (Keywords)
+	if strings.Contains(body, "http://") || 
+	   strings.Contains(body, "https://") || 
+	   strings.Contains(body, "wa.me/") || 
+	   strings.Contains(body, "chat.whatsapp.com/") {
+		   
+		// ڈیٹا بیس سے چیک کریں کہ گروپ میں اینٹی لنک آن ہے یا نہیں
+		var isAntiLinkOn bool
+		err := settingsDB.QueryRow("SELECT antilink FROM group_settings WHERE group_jid = ?", v.Info.Chat.User).Scan(&isAntiLinkOn)
+		
+		if err == nil && isAntiLinkOn {
+			
+			// 🛑 BOT ADMIN CHECK: بوٹ خود چیک کرے گا کہ وہ ایڈمن ہے یا نہیں
+			groupInfo, err := client.GetGroupInfo(context.Background(), v.Info.Chat)
+			if err != nil { return false }
+			
+			botJID := client.Store.ID.ToNonAD().User
+			isBotAdmin := false
+			for _, participant := range groupInfo.Participants {
+				if participant.JID.User == botJID && (participant.IsAdmin || participant.IsSuperAdmin) {
+					isBotAdmin = true
+					break
+				}
+			}
+			
+			// اگر بوٹ ایڈمن نہیں ہے، تو بالکل خاموش رہے (کوئی ایکشن یا میسج نہیں)
+			if !isBotAdmin {
+				return false 
+			}
+
+			// 1. بوٹ ایڈمن ہے، تو سب سے پہلے لنک والا میسج ڈیلیٹ کریں
+			client.RevokeMessage(context.Background(), v.Info.Chat, v.Info.ID)
+
+			// یوزر کی شناخت کے لیے ایک منفرد کی (Key) بنائیں
+			senderNum := v.Info.Sender.ToNonAD().User
+			userKey := v.Info.Chat.User + "|" + senderNum
+			
+			// 2. وارننگ کاؤنٹ میں اضافہ کریں 
+			warningMutex.Lock()
+			linkWarnings[userKey]++
+			strikes := linkWarnings[userKey]
+			warningMutex.Unlock()
+
+			// 3. ایکشن لیں: پہلی بار وارننگ، دوسری بار کک (سب انگلش میں)
+			if strikes == 1 {
+				// ⚠️ First Strike: Warning
+				warnMsg := fmt.Sprintf("🚫 *𝗔𝗡𝗧𝗜-𝗟𝗜𝗡𝗞 𝗦𝗬𝗦𝗧𝗘𝗠*\n\n⚠️ @%s, this is your first and last warning!\nSharing links is strictly prohibited in this group. You will be kicked next time.", senderNum)
+				replyMessage(client, v, warnMsg)
+			} else {
+				// 🚨 Second Strike: Kick
+				_, err := client.UpdateGroupParticipants(context.Background(), v.Info.Chat, []types.JID{v.Info.Sender.ToNonAD()}, whatsmeow.ParticipantChangeRemove)
+				
+				// اگر کک کامیاب ہو گئی تو میسج بھیجے، ورنہ خاموش رہے
+				if err == nil {
+					kickMsg := fmt.Sprintf("🚫 *𝗔𝗡𝗧𝗜-𝗟𝗜𝗡𝗞 𝗦𝗬𝗦𝗧𝗘𝗠*\n\n🚨 @%s has been removed from the group for sending links despite the warning!", senderNum)
+					replyMessage(client, v, kickMsg)
+				}
+
+				// کک کرنے کے بعد اس یوزر کا وارننگ ریکارڈ صاف کر دیں
+				warningMutex.Lock()
+				delete(linkWarnings, userKey)
+				warningMutex.Unlock()
+			}
+			return true // میسج پروسیس ہو گیا
+		}
+	}
+	return false
 }
 
 // ⚙️ Group Settings Toggle

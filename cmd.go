@@ -122,6 +122,10 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	
 	// ⚠️ 2. یہ آپ کا پرانا طریقہ ہے (اسے رہنے دیا ہے تاکہ پرانی کمانڈز نہ ٹوٹیں)
 	bodyClean := strings.ToLower(rawBody)
+	
+	if checkAntiLink(client, v, bodyClean) {
+		return // اگر لنک تھا اور ڈیلیٹ ہو گیا ہے، تو مزید پروسیسنگ یہیں روک دیں!
+	}
 
 	// 🎯 3. جادو یہاں ہے: میسج کو 2 حصوں میں توڑ لیا (کمانڈ اور لنک)
 	command := ""
