@@ -31,11 +31,12 @@ func initGroupDB() {
 }
 
 // وارننگز کا ریکارڈ رکھنے کے لیے میموری اور تھریڈ سیفٹی لاک
+// وارننگز کا ریکارڈ رکھنے کے لیے میموری اور تھریڈ سیفٹی لاک
 var linkWarnings = make(map[string]int)
 var warningMutex sync.Mutex
 
 // ==========================================
-// 🛡️ ADVANCED ANTI-LINK CHECKER (Action-Based & Silent Mode)
+// 🛡️ FAST ANTI-LINK CHECKER (No Admin Check, Direct Action)
 // ==========================================
 func checkAntiLink(client *whatsmeow.Client, v *events.Message, body string) bool {
 	// اگر پرائیویٹ میسج ہے، آپ کا اپنا میسج ہے، یا بھیجنے والا ایڈمن ہے تو اگنور کریں
@@ -53,43 +54,41 @@ func checkAntiLink(client *whatsmeow.Client, v *events.Message, body string) boo
 		
 		if err == nil && isAntiLinkOn {
 			
-			// 🛑 SMART LOGIC: ڈائریکٹ ایکشن لیں! کوئی ایڈمن چیک نہیں ہوگا۔
-			// 1. سب سے پہلے لنک والا میسج ڈیلیٹ کرنے کی کوشش کریں
-			_, err := client.RevokeMessage(context.Background(), v.Info.Chat, v.Info.ID)
-			
-			// اگر ایکشن فیل ہو گیا (یعنی بوٹ ایڈمن نہیں ہے، یا میسج پرانا ہے) تو بالکل خاموش رہیں
+			// 🚀 FAST ACTION: کوئی GetGroupInfo نہیں، ڈائریکٹ میسج اڑانے کی ٹرائی کریں!
+			revokeMsg := client.BuildRevoke(v.Info.Chat, v.Info.Sender, v.Info.ID)
+			_, err := client.SendMessage(context.Background(), v.Info.Chat, revokeMsg)
+
+			// اگر ایکشن میں ایرر آ گیا، تو بغیر کچھ کہے خاموش ہو جائیں
 			if err != nil {
 				return false 
 			}
 
-			// اگر یہاں تک آ گیا ہے تو اس کا مطلب ہے میسج کامیابی سے ڈیلیٹ ہو گیا اور بوٹ ایڈمن ہے!
-			
 			// یوزر کی شناخت کے لیے ایک منفرد کی (Key) بنائیں
 			senderNum := v.Info.Sender.ToNonAD().User
 			userKey := v.Info.Chat.User + "|" + senderNum
 			
-			// 2. وارننگ کاؤنٹ میں اضافہ کریں 
+			// وارننگ کاؤنٹ میں اضافہ کریں 
 			warningMutex.Lock()
 			linkWarnings[userKey]++
 			strikes := linkWarnings[userKey]
 			warningMutex.Unlock()
 
-			// 3. ایکشن لیں: پہلی بار وارننگ، دوسری بار کک (سب انگلش میں)
+			// ایکشن لیں: پہلی بار وارننگ، دوسری بار کک
 			if strikes == 1 {
 				// ⚠️ First Strike: Warning
 				warnMsg := fmt.Sprintf("🚫 *𝗔𝗡𝗧𝗜-𝗟𝗜𝗡𝗞 𝗦𝗬𝗦𝗧𝗘𝗠*\n\n⚠️ @%s, this is your first and last warning!\nSharing links is strictly prohibited in this group. You will be kicked next time.", senderNum)
 				replyMessage(client, v, warnMsg)
 			} else {
-				// 🚨 Second Strike: Kick کی کوشش کریں
+				// 🚨 Second Strike: Kick
 				_, err := client.UpdateGroupParticipants(context.Background(), v.Info.Chat, []types.JID{v.Info.Sender.ToNonAD()}, whatsmeow.ParticipantChangeRemove)
 				
-				// اگر کک کامیاب ہو گئی تو میسج بھیجے، اگر کک فیل ہو گئی تو بھی خاموش رہے!
+				// اگر کک کرنے میں بھی کوئی ایرر نہ آئے تو میسج بھیجے
 				if err == nil {
 					kickMsg := fmt.Sprintf("🚫 *𝗔𝗡𝗧𝗜-𝗟𝗜𝗡𝗞 𝗦𝗬𝗦𝗧𝗘𝗠*\n\n🚨 @%s has been removed from the group for sending links despite the warning!", senderNum)
 					replyMessage(client, v, kickMsg)
 				}
 
-				// کک کرنے کی ٹرائی کے بعد یوزر کا وارننگ ریکارڈ صاف کر دیں
+				// کک کرنے کے بعد یوزر کا وارننگ ریکارڈ صاف کر دیں
 				warningMutex.Lock()
 				delete(linkWarnings, userKey)
 				warningMutex.Unlock()
