@@ -32,72 +32,57 @@ func initGroupDB() {
 
 // وارننگز کا ریکارڈ رکھنے کے لیے میموری اور تھریڈ سیفٹی لاک
 // وارننگز کا ریکارڈ رکھنے کے لیے میموری اور تھریڈ سیفٹی لاک
+// وارننگز کا ریکارڈ رکھنے کے لیے میموری اور لاک
 var linkWarnings = make(map[string]int)
 var warningMutex sync.Mutex
 
-// ==========================================
-// 🛡️ FAST ANTI-LINK CHECKER (No Admin Check, Direct Action)
-// ==========================================
 func checkAntiLink(client *whatsmeow.Client, v *events.Message, body string) bool {
-	// اگر پرائیویٹ میسج ہے، آپ کا اپنا میسج ہے، یا بھیجنے والا ایڈمن ہے تو اگنور کریں
 	if !v.Info.IsGroup || v.Info.IsFromMe || isGroupAdmin(client, v) { return false }
 
-	// لنکس کی پہچان (Keywords)
-	if strings.Contains(body, "http://") || 
-	   strings.Contains(body, "https://") || 
-	   strings.Contains(body, "wa.me/") || 
-	   strings.Contains(body, "chat.whatsapp.com/") {
+	if strings.Contains(body, "http://") || strings.Contains(body, "https://") || 
+	   strings.Contains(body, "wa.me/") || strings.Contains(body, "chat.whatsapp.com/") {
 		   
-		// ڈیٹا بیس سے چیک کریں کہ گروپ میں اینٹی لنک آن ہے یا نہیں
 		var isAntiLinkOn bool
-		err := settingsDB.QueryRow("SELECT antilink FROM group_settings WHERE group_jid = ?", v.Info.Chat.User).Scan(&isAntiLinkOn)
+		settingsDB.QueryRow("SELECT antilink FROM group_settings WHERE group_jid = ?", v.Info.Chat.User).Scan(&isAntiLinkOn)
 		
-		if err == nil && isAntiLinkOn {
-			
-			// 🚀 FAST ACTION: کوئی GetGroupInfo نہیں، ڈائریکٹ میسج اڑانے کی ٹرائی کریں!
+		if isAntiLinkOn {
+			// 🚀 ڈائریکٹ ایکشن (Delete)
 			revokeMsg := client.BuildRevoke(v.Info.Chat, v.Info.Sender, v.Info.ID)
 			_, err := client.SendMessage(context.Background(), v.Info.Chat, revokeMsg)
+			if err != nil { return false }
 
-			// اگر ایکشن میں ایرر آ گیا، تو بغیر کچھ کہے خاموش ہو جائیں
-			if err != nil {
-				return false 
-			}
-
-			// یوزر کی شناخت کے لیے ایک منفرد کی (Key) بنائیں
+			// یوزر ڈیٹا
+			senderJID := v.Info.Sender.ToNonAD().String()
 			senderNum := v.Info.Sender.ToNonAD().User
 			userKey := v.Info.Chat.User + "|" + senderNum
 			
-			// وارننگ کاؤنٹ میں اضافہ کریں 
 			warningMutex.Lock()
 			linkWarnings[userKey]++
 			strikes := linkWarnings[userKey]
 			warningMutex.Unlock()
 
-			// ایکشن لیں: پہلی بار وارننگ، دوسری بار کک
 			if strikes == 1 {
-				// ⚠️ First Strike: Warning
-				warnMsg := fmt.Sprintf("🚫 *𝗔𝗡𝗧𝗜-𝗟𝗜𝗡𝗞 𝗦𝗬𝗦𝗧𝗘𝗠*\n\n⚠️ @%s, this is your first and last warning!\nSharing links is strictly prohibited in this group. You will be kicked next time.", senderNum)
-				replyMessage(client, v, warnMsg)
+				// ⚠️ First Strike: Warning with proper Mention
+				warnText := fmt.Sprintf("🚫 *𝗔𝗡𝗧𝗜-𝗟𝗜𝗡𝗞 𝗦𝗬𝗦𝗧𝗘𝗠*\n\n⚠️ @%s, this is your first and last warning!\nSharing links is strictly prohibited. You will be kicked next time.", senderNum)
+				replyMessages(client, v, warnText, []string{senderJID})
 			} else {
 				// 🚨 Second Strike: Kick
 				_, err := client.UpdateGroupParticipants(context.Background(), v.Info.Chat, []types.JID{v.Info.Sender.ToNonAD()}, whatsmeow.ParticipantChangeRemove)
-				
-				// اگر کک کرنے میں بھی کوئی ایرر نہ آئے تو میسج بھیجے
 				if err == nil {
-					kickMsg := fmt.Sprintf("🚫 *𝗔𝗡𝗧𝗜-𝗟𝗜𝗡𝗞 𝗦𝗬𝗦𝗧𝗘𝗠*\n\n🚨 @%s has been removed from the group for sending links despite the warning!", senderNum)
-					replyMessage(client, v, kickMsg)
+					kickText := fmt.Sprintf("🚫 *𝗔𝗡𝗧𝗜-𝗟𝗜𝗡𝗞 𝗦𝗬𝗦𝗧𝗘𝗠*\n\n🚨 @%s has been removed for violating rules!", senderNum)
+					replyMessages(client, v, kickText, []string{senderJID})
 				}
-
-				// کک کرنے کے بعد یوزر کا وارننگ ریکارڈ صاف کر دیں
+				
 				warningMutex.Lock()
 				delete(linkWarnings, userKey)
 				warningMutex.Unlock()
 			}
-			return true // میسج پروسیس ہو گیا
+			return true 
 		}
 	}
 	return false
 }
+
 
 
 // ⚙️ Group Settings Toggle

@@ -766,6 +766,25 @@ func replyMessage(client *whatsmeow.Client, v *events.Message, text string) stri
 	}
 	return ""
 }
+
+func replyMessages(client *whatsmeow.Client, v *events.Message, text string, mentions []string) string {
+	resp, err := client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
+		ExtendedTextMessage: &waProto.ExtendedTextMessage{
+			Text: proto.String(text),
+			ContextInfo: &waProto.ContextInfo{
+				StanzaID:      proto.String(v.Info.ID),
+				Participant:   proto.String(v.Info.Sender.String()),
+				QuotedMessage: v.Message,
+				MentionedJID:  mentions, // 👈 اب یہ مینشنز کو سپورٹ کرے گا
+			},
+		},
+	})
+	if err == nil {
+		return resp.ID
+	}
+	return ""
+}
+
 // ==========================================
 // 🔗 COMMAND: .pair (Public Pairing)
 // ==========================================
