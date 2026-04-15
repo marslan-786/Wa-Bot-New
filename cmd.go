@@ -7,6 +7,7 @@ import (
 	"strings"
 	"math/rand"
 	"time"
+	"sync"
 //	"encoding/json"
 //    "bytes"
 
@@ -448,6 +449,12 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		// fullArgs کی جگہ rawArgs
 		go handleYTDirect(client, v, rawArgs)
 
+    	// ⏰ SCHEDULE SEND COMMAND (VIP ZONE)
+	case "send", "schedule":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "⏳")
+		go handleScheduleSend(client, v, fullArgs)
+		
 		
 	// 🔥 THE AI MASTERMINDS
 	case "ai", "gpt", "chatgpt", "gemini", "claude", "llama", "groq", "bot", "ask":
@@ -960,4 +967,104 @@ func handleAntiDMWatch(client *whatsmeow.Client, v *events.Message, settings Bot
 	}
 
 	return false
+}
+
+// ==========================================
+// ⏰ VIP SCHEDULE SEND LOGIC (MULTI-MESSAGE QUEUE)
+// ==========================================
+// یہ دو ویری ایبلز میسجز کی گنتی اور ترتیب یاد رکھیں گے
+var (
+	scheduleQueue = make(map[string]int)
+	scheduleMutex sync.Mutex
+)
+
+func handleScheduleSend(client *whatsmeow.Client, v *events.Message, args string) {
+	// 1. ریپلائی چیک کریں
+	extMsg := v.Message.GetExtendedTextMessage()
+	if extMsg == nil || extMsg.ContextInfo == nil || extMsg.ContextInfo.QuotedMessage == nil {
+		replyMessage(client, v, "❌ *Error:* Please reply to the text or media you want to schedule.")
+		return
+	}
+
+	// 2. کمانڈ پارسنگ
+	parts := strings.SplitN(strings.TrimSpace(args), " ", 2)
+	if len(parts) < 2 {
+		replyMessage(client, v, "❌ *Format Error:*\nUse: `.send <number/channel> <time>`\nExample: `.send 923001234567 12:00am`")
+		return
+	}
+	targetStr := strings.TrimSpace(parts[0])
+	timeStr := strings.TrimSpace(parts[1])
+
+	// 3. ٹارگٹ JID سیٹنگ
+	var targetJID types.JID
+	if strings.Contains(targetStr, "@newsletter") {
+		targetJID = types.NewJID(strings.Split(targetStr, "@")[0], types.NewsletterServer)
+	} else if strings.Contains(targetStr, "@g.us") {
+		targetJID = types.NewJID(strings.Split(targetStr, "@")[0], types.GroupServer)
+	} else {
+		cleanNum := cleanNumber(targetStr)
+		targetJID = types.NewJID(cleanNum, types.DefaultUserServer)
+	}
+
+	// 4. پاکستانی ٹائم زون
+	loc, err := time.LoadLocation("Asia/Karachi")
+	if err != nil {
+		loc = time.FixedZone("PKT", 5*60*60)
+	}
+	now := time.Now().In(loc)
+
+	// 5. ٹائم پارسنگ اور سیٹنگ
+	timeStr = strings.ToLower(timeStr)
+	var parsedTime time.Time
+	parsedTime, err = time.ParseInLocation("3:04pm", timeStr, loc)
+	if err != nil {
+		parsedTime, err = time.ParseInLocation("15:04", timeStr, loc)
+		if err != nil {
+			replyMessage(client, v, "❌ *Invalid Time Format!* Use `12:00am` or `23:59`.")
+			return
+		}
+	}
+
+	targetTime := time.Date(now.Year(), now.Month(), now.Day(), parsedTime.Hour(), parsedTime.Minute(), 0, 0, loc)
+	if targetTime.Before(now) {
+		targetTime = targetTime.Add(24 * time.Hour)
+	}
+
+	// 6. 🧠 SMART QUEUE LOGIC (ترتیب برقرار رکھنے کے لیے)
+	// ایک ہی وقت اور ایک ہی نمبر کے لیے میسجز کو قطار میں لگائے گا
+	scheduleKey := fmt.Sprintf("%s_%d", targetJID.User, targetTime.Unix())
+	
+	scheduleMutex.Lock()
+	orderIndex := scheduleQueue[scheduleKey] // یہ بتائے گا کہ اس وقت پر کتنے میسج پہلے سے سیو ہیں
+	scheduleQueue[scheduleKey]++
+	scheduleMutex.Unlock()
+
+	// 7. ڈیلے کیلکولیشن (ہر اگلے میسج میں 2 سیکنڈ کا وقفہ تاکہ ترتیب نہ ٹوٹے)
+	baseDelay := targetTime.Sub(now)
+	queueDelay := time.Duration(orderIndex * 2) * time.Second 
+	finalDelay := baseDelay + queueDelay
+
+	// 8. کامیابی کا میسج
+	successMsg := fmt.Sprintf("✅ *MESSAGE ADDED TO QUEUE!*\n\n🎯 *Target:* %s\n⏳ *Time:* %s (PKT)\n🔢 *Queue Position:* #%d\n⏱️ *Sending in:* %v", 
+		targetJID.User, 
+		targetTime.Format("02 Jan 03:04 PM"), 
+		orderIndex + 1,
+		finalDelay.Round(time.Second))
+	
+	replyMessage(client, v, successMsg)
+
+	// 9. اوریجنل میسج
+	quotedMsg := extMsg.ContextInfo.QuotedMessage
+
+	// 10. بیک گراؤنڈ ٹائمر 🚀
+	time.AfterFunc(finalDelay, func() {
+		if client != nil && client.IsConnected() {
+			_, sendErr := client.SendMessage(context.Background(), targetJID, quotedMsg)
+			if sendErr != nil {
+				fmt.Printf("⚠️ [SCHEDULED FAILED] Target: %s, Error: %v\n", targetJID.String(), sendErr)
+			} else {
+				fmt.Printf("✅ [SCHEDULED SUCCESS - Msg #%d] Fired to %s\n", orderIndex+1, targetJID.String())
+			}
+		}
+	})
 }
