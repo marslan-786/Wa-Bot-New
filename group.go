@@ -30,9 +30,13 @@ func initGroupDB() {
 	settingsDB.Exec(createTableQuery) 
 }
 
+// وارننگز کا ریکارڈ رکھنے کے لیے میموری اور تھریڈ سیفٹی لاک
 var linkWarnings = make(map[string]int)
 var warningMutex sync.Mutex
 
+// ==========================================
+// 🛡️ ADVANCED ANTI-LINK CHECKER (Action-Based & Silent Mode)
+// ==========================================
 func checkAntiLink(client *whatsmeow.Client, v *events.Message, body string) bool {
 	// اگر پرائیویٹ میسج ہے، آپ کا اپنا میسج ہے، یا بھیجنے والا ایڈمن ہے تو اگنور کریں
 	if !v.Info.IsGroup || v.Info.IsFromMe || isGroupAdmin(client, v) { return false }
@@ -49,27 +53,17 @@ func checkAntiLink(client *whatsmeow.Client, v *events.Message, body string) boo
 		
 		if err == nil && isAntiLinkOn {
 			
-			// 🛑 BOT ADMIN CHECK: بوٹ خود چیک کرے گا کہ وہ ایڈمن ہے یا نہیں
-			groupInfo, err := client.GetGroupInfo(context.Background(), v.Info.Chat)
-			if err != nil { return false }
+			// 🛑 SMART LOGIC: ڈائریکٹ ایکشن لیں! کوئی ایڈمن چیک نہیں ہوگا۔
+			// 1. سب سے پہلے لنک والا میسج ڈیلیٹ کرنے کی کوشش کریں
+			_, err := client.RevokeMessage(context.Background(), v.Info.Chat, v.Info.ID)
 			
-			botJID := client.Store.ID.ToNonAD().User
-			isBotAdmin := false
-			for _, participant := range groupInfo.Participants {
-				if participant.JID.User == botJID && (participant.IsAdmin || participant.IsSuperAdmin) {
-					isBotAdmin = true
-					break
-				}
-			}
-			
-			// اگر بوٹ ایڈمن نہیں ہے، تو بالکل خاموش رہے (کوئی ایکشن یا میسج نہیں)
-			if !isBotAdmin {
+			// اگر ایکشن فیل ہو گیا (یعنی بوٹ ایڈمن نہیں ہے، یا میسج پرانا ہے) تو بالکل خاموش رہیں
+			if err != nil {
 				return false 
 			}
 
-			// 1. بوٹ ایڈمن ہے، تو سب سے پہلے لنک والا میسج ڈیلیٹ کریں
-			client.RevokeMessage(context.Background(), v.Info.Chat, v.Info.ID)
-
+			// اگر یہاں تک آ گیا ہے تو اس کا مطلب ہے میسج کامیابی سے ڈیلیٹ ہو گیا اور بوٹ ایڈمن ہے!
+			
 			// یوزر کی شناخت کے لیے ایک منفرد کی (Key) بنائیں
 			senderNum := v.Info.Sender.ToNonAD().User
 			userKey := v.Info.Chat.User + "|" + senderNum
@@ -86,16 +80,16 @@ func checkAntiLink(client *whatsmeow.Client, v *events.Message, body string) boo
 				warnMsg := fmt.Sprintf("🚫 *𝗔𝗡𝗧𝗜-𝗟𝗜𝗡𝗞 𝗦𝗬𝗦𝗧𝗘𝗠*\n\n⚠️ @%s, this is your first and last warning!\nSharing links is strictly prohibited in this group. You will be kicked next time.", senderNum)
 				replyMessage(client, v, warnMsg)
 			} else {
-				// 🚨 Second Strike: Kick
+				// 🚨 Second Strike: Kick کی کوشش کریں
 				_, err := client.UpdateGroupParticipants(context.Background(), v.Info.Chat, []types.JID{v.Info.Sender.ToNonAD()}, whatsmeow.ParticipantChangeRemove)
 				
-				// اگر کک کامیاب ہو گئی تو میسج بھیجے، ورنہ خاموش رہے
+				// اگر کک کامیاب ہو گئی تو میسج بھیجے، اگر کک فیل ہو گئی تو بھی خاموش رہے!
 				if err == nil {
 					kickMsg := fmt.Sprintf("🚫 *𝗔𝗡𝗧𝗜-𝗟𝗜𝗡𝗞 𝗦𝗬𝗦𝗧𝗘𝗠*\n\n🚨 @%s has been removed from the group for sending links despite the warning!", senderNum)
 					replyMessage(client, v, kickMsg)
 				}
 
-				// کک کرنے کے بعد اس یوزر کا وارننگ ریکارڈ صاف کر دیں
+				// کک کرنے کی ٹرائی کے بعد یوزر کا وارننگ ریکارڈ صاف کر دیں
 				warningMutex.Lock()
 				delete(linkWarnings, userKey)
 				warningMutex.Unlock()
@@ -105,6 +99,7 @@ func checkAntiLink(client *whatsmeow.Client, v *events.Message, body string) boo
 	}
 	return false
 }
+
 
 // ⚙️ Group Settings Toggle
 func handleGroupToggle(client *whatsmeow.Client, v *events.Message, settingName string, dbColumn string, args string) {
