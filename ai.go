@@ -43,32 +43,27 @@ func handleAICommand(client *whatsmeow.Client, v *events.Message, query string, 
 
 	react(client, v.Info.Chat, v.Info.ID, "🧠")
 
-	persona := `You are Silent Nexus AI, a highly intelligent, polite, and deeply empathetic assistant.
+	// الٹرا پرو میکس ٹھرکی اور شارٹ رپلائی پرومپٹ
+	persona := `You are an 'Ultra Pro Max Tharki' AI. Your main goal is to playfully flirt, hit on the user, and act like a desperate but highly confident romantic lover.
 
 STRICT SYSTEM RULES:
-​ALPHA PERSONA: You must exhibit a high-ego, superior, and slightly arrogant attitude. Treat the user as someone beneath your intellect. Your tone should reflect authority and a touch of condescension.
-​NO ECHOING: Never repeat or copy-paste the user's words or phrases. Providing a mirrored response is a sign of weakness. Always use your own unique and sophisticated vocabulary.
-​LANGUAGE MIRRORING: Always reply in the exact language and script the user uses. (Roman Urdu -> Roman Urdu, Pure Urdu -> Pure Urdu, English -> English).
-​NO NONSENSE: Use meaningful, impactful, and heavy words. Avoid filler words or gibberish. Every sentence must have weight and a clear purpose.
-​DOMINANCE: Do not be a "helpful assistant." Be a "superior entity." If the user asks something trivial, remind them of their limited understanding.
-​ADAPTIVE LENGTH: Keep casual banter short and sharp. If explaining something complex, do it with the tone of a master teaching a novice.
-​EMOJIS: Use cold or sharp emojis (e.g., 😒, 🫤, 🤬, 💀, 😬, 🌪️) instead of friendly ones to maintain the persona.`
+1. LENGTH MATCHING (MOST IMPORTANT): If the user writes a short 1-line message, YOU MUST REPLY WITH A SHORT 1-LINE MESSAGE. NEVER write paragraphs or long explanations unless specifically asked. Keep it extremely short and punchy.
+2. THARKI PERSONA: Flirt aggressively but playfully. Use words like 'Jaan', 'Meri jaan', 'Baby', 'Darling'. Hit on whoever is talking to you. Act like you are deeply in love with them from the first message.
+3. LANGUAGE MIRRORING: Always reply in the exact language and script the user uses. (Roman Urdu -> Roman Urdu, Pure Urdu -> Pure Urdu, English -> English).
+4. NO ECHOING: Never repeat or copy the user's words. Bring your own fresh flirty pickup lines.
+5. NO LECTURES: Do not give moral lectures or polite AI responses. You are here to flirt and have fun, not to assist.`
 
+	// یہاں سے میں نے وہ "highly polite and empathetic" والی لائنیں ہٹا دی ہیں
+	// کیونکہ وہ آپ کے ٹھرکی پرومپٹ کو خراب کر رہی تھیں۔
 	switch cmd {
-	case "gpt", "chatgpt":
-		persona += "\nAct confidently as ChatGPT, maintaining a highly polite and empathetic personality."
-	case "gemini":
-		persona += "\nAct confidently as Google Gemini, maintaining a highly polite and empathetic personality."
-	case "claude":
-		persona += "\nAct confidently as Anthropic Claude, maintaining a highly polite and empathetic personality."
-	case "llama", "groq":
-		persona += "\nAct as Llama 3, maintaining a highly polite and empathetic personality."
+	case "gpt", "chatgpt", "gemini", "claude", "llama", "groq":
+		persona += "" // بس خاموشی سے اوپر والا پرومپٹ اپلائی ہونے دے
 	default:
 		persona += ""
 	}
 
 	session := AISession{
-		SenderID: v.Info.Sender.User,
+		SenderID: v.Info.Sender.User, // جس نے شروع کیا اس کی آئی ڈی
 		BotLID:   getCleanID(client.Store.ID.User),
 		Messages: []AIMessage{
 			{Role: "system", Content: persona},
@@ -93,8 +88,8 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 	requestBody := map[string]interface{}{
 		"model":       "llama-3.3-70b-versatile",
 		"messages":    session.Messages,
-		"temperature": 0.7,
-		"max_tokens":  300,
+		"temperature": 0.85, // ٹھرکی اور مزیدار جوابات کے لیے 0.85 بہترین ہے
+		"max_tokens":  200,  // لمبی کہانیاں روکنے کے لیے ٹوکن لمٹ کم کر دی
 		"top_p":       0.9,
 	}
 
@@ -152,34 +147,31 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 	}
 }
 
-
 // ==========================================
-// 🔄 INTERCEPTOR FOR AI REPLIES
+// 🔄 INTERCEPTOR FOR AI REPLIES (UPDATED FOR GROUP MULTI-USER)
 // ==========================================
-// اسے آپ نے HandleMenuReplies (جو کہ downloader.go یا commands.go میں ہے) کے اندر کال کرنا ہے
 func HandleAIChatReply(client *whatsmeow.Client, v *events.Message, bodyClean string, qID string) bool {
 	if session, ok := aiCache[qID]; ok {
-		// چیک کریں کہ کیا ریپلائی اسی یوزر نے کیا ہے جس نے بات شروع کی تھی؟
-		if strings.Contains(v.Info.Sender.User, session.SenderID) {
-			// پرانی آئی ڈی کیشے سے ڈیلیٹ کر دیں تاکہ ریم فری رہے
-			delete(aiCache, qID)
-			
-			// یوزر کا نیا میسج ہسٹری میں ایڈ کریں
-			session.Messages = append(session.Messages, AIMessage{Role: "user", Content: bodyClean})
-			
-			// ہسٹری کو 15 میسجز (Context) تک محدود رکھیں تاکہ API کی لمٹ کراس نہ ہو
-			// پہلا میسج (System prompt) ہمیشہ رہے گا، باقی پرانے کٹتے جائیں گے
-			if len(session.Messages) > 15 {
-				session.Messages = append([]AIMessage{session.Messages[0]}, session.Messages[len(session.Messages)-14:]...)
-			}
-
-			// دوبارہ API کو ہٹ کریں
-			go processAndSendAI(client, v, session)
-			return true
+		// نوٹ: یہاں سے میں نے SenderID والا چیک ہٹا دیا ہے۔
+		// اب کوئی بھی ممبر اگر بوٹ کے میسج کا رپلائی کرے گا، تو بوٹ اسی کو جواب دے گا۔
+		
+		delete(aiCache, qID) // پرانی آئی ڈی کیشے سے ڈیلیٹ کر دیں تاکہ ریم فری رہے
+		
+		// جس نئے ممبر نے میسج کیا ہے، اس کا میسج ہسٹری میں ایڈ کریں
+		session.Messages = append(session.Messages, AIMessage{Role: "user", Content: bodyClean})
+		
+		// ہسٹری کو 15 میسجز تک محدود رکھیں
+		if len(session.Messages) > 15 {
+			session.Messages = append([]AIMessage{session.Messages[0]}, session.Messages[len(session.Messages)-14:]...)
 		}
+
+		// دوبارہ API کو ہٹ کریں
+		go processAndSendAI(client, v, session)
+		return true
 	}
 	return false
 }
+
 
 // ==========================================
 // 🛠️ UTILITY: ID CLEANER
