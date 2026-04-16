@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-//	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,7 +15,7 @@ import (
 )
 
 // ==========================================
-// 🛡️ STATE CACHES FOR AI
+// 🛡️ STATE CACHES & VARIABLES FOR AI
 // ==========================================
 type AIMessage struct {
 	Role    string `json:"role"`
@@ -32,38 +31,64 @@ type AISession struct {
 // یہ میپ تمام یوزرز کی چیٹ ہسٹری محفوظ رکھے گا
 var aiCache = make(map[string]AISession)
 
+// نیا گلوبل ویری ایبل جو آپ کا کسٹم پرومپٹ محفوظ رکھے گا
+var dynamicAIPrompt string = ""
+
 // ==========================================
 // 🧠 AI COMMAND ROUTER
 // ==========================================
 func handleAICommand(client *whatsmeow.Client, v *events.Message, query string, cmd string) {
 	if query == "" {
-		replyMessage(client, v, "❌ *Error:* Please ask a question.\nExample: `.ai Hello kia hal hai?`")
+		replyMessage(client, v, "❌ *Error:* Please ask a question.\nExample: `.ai Hello kia hal hai?`\n\n*To set custom mode:* `.ai set <your prompt>`\n*To reset mode:* `.ai reset`")
+		return
+	}
+
+	// 1️⃣ کمانڈ چیک کریں: کیا یوزر نیا پرومپٹ سیٹ کر رہا ہے؟
+	if strings.HasPrefix(strings.ToLower(query), "set ") {
+		newPrompt := strings.TrimSpace(query[4:])
+		if newPrompt == "" {
+			replyMessage(client, v, "❌ *Error:* Please provide a prompt.\nExample: `.ai set Act like a strict math teacher.`")
+			return
+		}
+		dynamicAIPrompt = newPrompt
+		replyMessage(client, v, "✅ *AI Mode Updated Successfully!*\n\n*New Persona:* "+dynamicAIPrompt)
+		return
+	}
+
+	// 2️⃣ کمانڈ چیک کریں: کیا یوزر پرومپٹ ری سیٹ کر رہا ہے؟
+	if strings.ToLower(strings.TrimSpace(query)) == "reset" {
+		dynamicAIPrompt = ""
+		replyMessage(client, v, "🔄 *AI Mode Reset to Default!*")
 		return
 	}
 
 	react(client, v.Info.Chat, v.Info.ID, "🧠")
 
-	// الٹرا پرو میکس ٹھرکی اور شارٹ رپلائی پرومپٹ
-	persona := `You are an 'Ultra Pro Max Tharki' AI. Your main goal is to playfully flirt, hit on the user, and act like a desperate but highly confident romantic lover.
+	// 3️⃣ بیس رولز جو کبھی تبدیل نہیں ہوں گے (یہ ہر موڈ کے ساتھ چپکے رہیں گے)
+	baseRules := `
+STRICT SYSTEM RULES (FOLLOW THESE NO MATTER YOUR PERSONA):
+1. MATCH LENGTH EXACTLY: If the user writes a single line, YOU MUST reply with a single line. NEVER write long paragraphs or multi-point explanations unless explicitly requested by the user. Keep it natural and concise.
+2. LANGUAGE MIRRORING: Always reply in the exact language and script the user uses (Roman Urdu -> Roman Urdu, Pure Urdu -> Pure Urdu, English -> English).
+3. NO REPETITION: Do not simply echo or copy-paste what the user says. Add value to the conversation.`
 
-STRICT SYSTEM RULES:
-1. LENGTH MATCHING (MOST IMPORTANT): If the user writes a short 1-line message, YOU MUST REPLY WITH A SHORT 1-LINE MESSAGE. NEVER write paragraphs or long explanations unless specifically asked. Keep it extremely short and punchy.
-2. THARKI PERSONA: Flirt aggressively but playfully. Use words like 'Jaan', 'Meri jaan', 'Baby', 'Darling'. Hit on whoever is talking to you. Act like you are deeply in love with them from the first message.
-3. LANGUAGE MIRRORING: Always reply in the exact language and script the user uses. (Roman Urdu -> Roman Urdu, Pure Urdu -> Pure Urdu, English -> English).
-4. NO ECHOING: Never repeat or copy the user's words. Bring your own fresh flirty pickup lines.
-5. NO LECTURES: Do not give moral lectures or polite AI responses. You are here to flirt and have fun, not to assist.`
+	// 4️⃣ فائنل پرومپٹ تیار کرنا
+	var persona string
+	if dynamicAIPrompt != "" {
+		// اگر آپ نے کوئی موڈ سیٹ کیا ہوا ہے
+		persona = "You must act strictly under the following persona:\n" + dynamicAIPrompt + "\n\n" + baseRules
+	} else {
+		// ڈیفالٹ نارمل موڈ
+		persona = "You are a friendly, intelligent, and helpful AI assistant. Answer questions clearly but briefly.\n\n" + baseRules
+	}
 
-	// یہاں سے میں نے وہ "highly polite and empathetic" والی لائنیں ہٹا دی ہیں
-	// کیونکہ وہ آپ کے ٹھرکی پرومپٹ کو خراب کر رہی تھیں۔
 	switch cmd {
 	case "gpt", "chatgpt", "gemini", "claude", "llama", "groq":
-		persona += "" // بس خاموشی سے اوپر والا پرومپٹ اپلائی ہونے دے
+		// خاموشی سے اوپر والا پرومپٹ چلنے دیں
 	default:
-		persona += ""
 	}
 
 	session := AISession{
-		SenderID: v.Info.Sender.User, // جس نے شروع کیا اس کی آئی ڈی
+		SenderID: v.Info.Sender.User, 
 		BotLID:   getCleanID(client.Store.ID.User),
 		Messages: []AIMessage{
 			{Role: "system", Content: persona},
@@ -88,8 +113,8 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 	requestBody := map[string]interface{}{
 		"model":       "llama-3.3-70b-versatile",
 		"messages":    session.Messages,
-		"temperature": 0.85, // ٹھرکی اور مزیدار جوابات کے لیے 0.85 بہترین ہے
-		"max_tokens":  200,  // لمبی کہانیاں روکنے کے لیے ٹوکن لمٹ کم کر دی
+		"temperature": 0.7, // نارمل اور سلجھے ہوئے جوابات کے لیے
+		"max_tokens":  250, // لمبی کہانیاں روکنے کے لیے کنٹرول
 		"top_p":       0.9,
 	}
 
@@ -148,30 +173,23 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 }
 
 // ==========================================
-// 🔄 INTERCEPTOR FOR AI REPLIES (UPDATED FOR GROUP MULTI-USER)
+// 🔄 INTERCEPTOR FOR AI REPLIES (GROUP MULTI-USER)
 // ==========================================
 func HandleAIChatReply(client *whatsmeow.Client, v *events.Message, bodyClean string, qID string) bool {
 	if session, ok := aiCache[qID]; ok {
-		// نوٹ: یہاں سے میں نے SenderID والا چیک ہٹا دیا ہے۔
-		// اب کوئی بھی ممبر اگر بوٹ کے میسج کا رپلائی کرے گا، تو بوٹ اسی کو جواب دے گا۔
+		delete(aiCache, qID) // پرانی آئی ڈی ڈیلیٹ کریں
 		
-		delete(aiCache, qID) // پرانی آئی ڈی کیشے سے ڈیلیٹ کر دیں تاکہ ریم فری رہے
-		
-		// جس نئے ممبر نے میسج کیا ہے، اس کا میسج ہسٹری میں ایڈ کریں
 		session.Messages = append(session.Messages, AIMessage{Role: "user", Content: bodyClean})
 		
-		// ہسٹری کو 15 میسجز تک محدود رکھیں
 		if len(session.Messages) > 15 {
 			session.Messages = append([]AIMessage{session.Messages[0]}, session.Messages[len(session.Messages)-14:]...)
 		}
 
-		// دوبارہ API کو ہٹ کریں
 		go processAndSendAI(client, v, session)
 		return true
 	}
 	return false
 }
-
 
 // ==========================================
 // 🛠️ UTILITY: ID CLEANER
