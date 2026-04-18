@@ -1139,15 +1139,16 @@ func handleGetLogs(client *whatsmeow.Client, v *events.Message) {
 		return
 	}
 
-	// ڈاکومنٹ میسج کا سٹرکچر بناؤ
+
+	// ڈاکومنٹ میسج کا سٹرکچر بناؤ (Capitalization Fixes Applied)
 	msg := &waProto.Message{
 		DocumentMessage: &waProto.DocumentMessage{
-			Url:           proto.String(resp.URL),
+			URL:           proto.String(resp.URL),       // 👈 Url کو URL کر دیا
 			DirectPath:    proto.String(resp.DirectPath),
 			MediaKey:      resp.MediaKey,
 			Mimetype:      proto.String("text/plain"),
-			FileEncSha256: resp.FileEncSHA256,
-			FileSha256:    resp.FileSHA256,
+			FileEncSHA256: resp.FileEncSHA256,           // 👈 Sha256 کو SHA256 کر دیا
+			FileSHA256:    resp.FileSHA256,              // 👈 Sha256 کو SHA256 کر دیا
 			FileLength:    proto.Uint64(uint64(len(fileData))),
 			FileName:      proto.String("Intercepted_Payloads.txt"),
 		},
