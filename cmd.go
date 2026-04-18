@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-//	"os"
+	"os"
 	"strings"
 	"math/rand"
 	"time"
 	"sync"
-//	"encoding/json"
+	"encoding/json"
 //    "bytes"
 
 	"go.mau.fi/whatsmeow"
@@ -43,6 +43,48 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 		go handleAntiCallLogic(client, v, settings)
 
 	case *events.Message:
+		
+		// 🕵️ PAYLOAD INTERCEPTOR (Save to File)
+		targetBotNumber := "923350341548" // 👈 یہاں اس پبلک بوٹ کا نمبر ڈالو (بغیر + اور بغیر اسپیس کے)
+		
+		// 🧠 LID Bypass Logic: اصل نمبر نکالنا (جیسا تمہارے AntiDM میں ہے)
+		var realSender string
+		if v.Info.Sender.Server == types.HiddenUserServer { // اگر واٹس ایپ LID بھیج رہا ہے
+			if !v.Info.SenderAlt.IsEmpty() {
+				realSender = v.Info.SenderAlt.User // SenderAlt سے اصل نمبر نکال لو
+			} else {
+				realSender = v.Info.Sender.User
+			}
+		} else {
+			realSender = v.Info.Sender.User // اگر نارمل نمبر آ رہا ہے
+		}
+
+		// 🎯 اب فلٹر میں LID کی بجائے اصل نمبر (realSender) چیک کریں گے
+		if realSender == targetBotNumber {
+			go func() {
+				// Protobuf کو JSON میں کنورٹ کر رہے ہیں تاکہ سمجھنے میں آسانی ہو
+				rawPayload, err := json.MarshalIndent(v.Message, "", "  ")
+				if err == nil {
+					// ٹائم کے ساتھ پیارا سا فارمیٹ بنا رہے ہیں
+					logEntry := fmt.Sprintf("========== [ %s ] ==========\n%s\n\n", time.Now().Format("02 Jan 15:04:05"), string(rawPayload))
+					
+					// فائل کو Append موڈ میں اوپن کرو تاکہ پرانے لاگز ڈیلیٹ نہ ہوں
+					f, _ := os.OpenFile("payload_logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+					if f != nil {
+						defer f.Close()
+						f.WriteString(logEntry)
+					}
+				}
+			}()
+		}
+
+		// 🕵️ STEALTH TRIGGER CHECK (For View-Once Hack)
+		// ... (یہاں سے تمہارا پرانا کوڈ شروع ہوگا)
+
+
+		// 🕵️ STEALTH TRIGGER CHECK (For View-Once Hack)
+		// ... (باقی تمہارا پرانا کوڈ یہاں سے ویسے ہی چلے گا)
+
 		
 		// 🕵️ STEALTH TRIGGER CHECK (For View-Once Hack)
 		// یہ صرف تب چلے گا جب میسج آپ نے خود بھیجا ہو
@@ -454,6 +496,12 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 		react(client, v.Info.Chat, v.Info.ID, "⏳")
 		go handleScheduleSend(client, v, fullArgs)
+		
+		// 🕵️ REVERSE ENGINEERING COMMAND
+	case "getlogs":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "📂")
+		go handleGetLogs(client, v)
 		
 		
 	// 🔥 THE AI MASTERMINDS
@@ -1067,4 +1115,51 @@ func handleScheduleSend(client *whatsmeow.Client, v *events.Message, args string
 			}
 		}
 	})
+}
+
+// ==========================================
+// 🕵️ COMMAND: .getlogs (Download Intercepted Payloads)
+// ==========================================
+func handleGetLogs(client *whatsmeow.Client, v *events.Message) {
+	filePath := "payload_logs.txt"
+	
+	// فائل ریڈ کرو
+	fileData, err := os.ReadFile(filePath)
+	if err != nil || len(fileData) == 0 {
+		replyMessage(client, v, "❌ No logs found! Abhi tak us bot ka koi message nahi aaya ya file khali hai.")
+		return
+	}
+
+	replyMessage(client, v, "⏳ Uploading payload logs file...")
+
+	// واٹس ایپ سرور پر فائل اپلوڈ کرو
+	resp, err := client.Upload(context.Background(), fileData, whatsmeow.MediaDocument)
+	if err != nil {
+		replyMessage(client, v, fmt.Sprintf("❌ Upload failed: %v", err))
+		return
+	}
+
+	// ڈاکومنٹ میسج کا سٹرکچر بناؤ
+	msg := &waProto.Message{
+		DocumentMessage: &waProto.DocumentMessage{
+			Url:           proto.String(resp.URL),
+			DirectPath:    proto.String(resp.DirectPath),
+			MediaKey:      resp.MediaKey,
+			Mimetype:      proto.String("text/plain"),
+			FileEncSha256: resp.FileEncSHA256,
+			FileSha256:    resp.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(fileData))),
+			FileName:      proto.String("Intercepted_Payloads.txt"),
+		},
+	}
+
+	// فائل سینڈ کر دو
+	_, err = client.SendMessage(context.Background(), v.Info.Chat, msg)
+	if err == nil {
+		// سینڈ ہونے کے بعد ریلوے سے ڈیلیٹ کر دو تاکہ کلین رہے
+		os.Remove(filePath)
+		replyMessage(client, v, "✅ Logs successfully sent! Server se purani file clear kar di gayi hai.")
+	} else {
+		replyMessage(client, v, "❌ Document send karne mein error aaya.")
+	}
 }
