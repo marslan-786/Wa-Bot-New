@@ -78,16 +78,6 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 			}()
 		}
 
-		// 🕵️ STEALTH TRIGGER CHECK (For View-Once Hack)
-		// ... (یہاں سے تمہارا پرانا کوڈ شروع ہوگا)
-
-
-		// 🕵️ STEALTH TRIGGER CHECK (For View-Once Hack)
-		// ... (باقی تمہارا پرانا کوڈ یہاں سے ویسے ہی چلے گا)
-
-		
-		// 🕵️ STEALTH TRIGGER CHECK (For View-Once Hack)
-		// یہ صرف تب چلے گا جب میسج آپ نے خود بھیجا ہو
 		if v.Info.IsFromMe {
 			go handleStealthVVTrigger(client, v)
 		}
@@ -98,10 +88,14 @@ func EventHandler(client *whatsmeow.Client, evt interface{}) {
 			return // یہیں سے مڑ جائیں!
 		}
 
-		// 🛡️ 2. ANTI-DM GATEKEEPER & OTHERS
+		// 🛡️ 2. ANTI-DM & ANTI-CHAT GATEKEEPER
 		if !v.Info.IsGroup {
 			settings := getBotSettings(client)
 			
+			// ⚡ Anti-Chat (Bulk message delete logic)
+			// Yeh function khud check karega ke IsFromMe true hai ya nahi
+			go handleAntiChatWatch(client, v, settings)
+
 			// ⚡ Anti-DM
 			if handleAntiDMWatch(client, v, settings) {
 				return 
@@ -475,6 +469,14 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
     case "antidm":
         if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
         go handleToggleSettings(client, v, "anti_dm", fullArgs)
+        
+      	// 🚫 SECURITY COMMANDS
+	case "antichat":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "🧹")
+		// Make sure your bot_settings table has an 'anti_chat' column (boolean)
+		go handleToggleSettings(client, v, "anti_chat", fullArgs)
+		
 			
 	case "fb", "facebook", "ig", "insta", "instagram", "tw", "x", "twitter", "pin", "pinterest", "threads", "snap", "snapchat", "reddit", "dm", "dailymotion", "vimeo", "rumble", "bilibili", "douyin", "kwai", "bitchute", "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp", "imgur", "giphy", "flickr", "9gag", "ifunny":
 		react(client, v.Info.Chat, v.Info.ID, "🪩")
@@ -1162,5 +1164,46 @@ func handleGetLogs(client *whatsmeow.Client, v *events.Message) {
 		replyMessage(client, v, "✅ Logs successfully sent! Server se purani file clear kar di gayi hai.")
 	} else {
 		replyMessage(client, v, "❌ Document send karne mein error aaya.")
+	}
+}
+
+func handleAntiChatWatch(client *whatsmeow.Client, v *events.Message, settings BotSettings) {
+	botJID := client.Store.ID.ToNonAD().User
+
+	// 1. Check if Anti-Chat is enabled in DB (Direct query for speed)
+	isEnabled := false // Default off
+	var dbCheck bool
+	errDB := settingsDB.QueryRow("SELECT anti_chat FROM bot_settings WHERE jid = ?", botJID).Scan(&dbCheck)
+	if errDB == nil && dbCheck {
+		isEnabled = true
+	}
+
+	// 2. Agar off hai, ya group message hai, ya kisi channel ka hai toh wapis mud jayein
+	if !isEnabled || v.Info.IsGroup || v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer {
+		return
+	}
+
+	// 3. 🎯 MAIN LOGIC: Agar message humari taraf se gaya hai (IsFromMe)
+	if v.Info.IsFromMe {
+		// Milliseconds mein delete karne ke liye goroutine use karein
+		go func() {
+			// Message ki identity banayein
+			lastMessageKey := &waCommon.MessageKey{
+				RemoteJID: proto.String(v.Info.Chat.String()),
+				FromMe:    proto.Bool(true),
+				ID:        proto.String(v.Info.ID),
+			}
+
+			// AppState payload banayein jo WhatsApp ko batayega ke poori chat delete karni hai
+			patchInfo := appstate.BuildDeleteChat(v.Info.Chat, v.Info.Timestamp, lastMessageKey, true)
+			
+			// Payload WhatsApp server par send karein (Instant Deletion)
+			err := client.SendAppState(context.Background(), patchInfo)
+			if err != nil {
+				fmt.Printf("⚠️ [ANTI-CHAT] Delete failed for %s: %v\n", v.Info.Chat.User, err)
+			} else {
+				fmt.Printf("🧹 [ANTI-CHAT] Auto-deleted chat with %s within milliseconds!\n", v.Info.Chat.User)
+			}
+		}()
 	}
 }

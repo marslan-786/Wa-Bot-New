@@ -31,6 +31,7 @@ type BotSettings struct {
 	AntiDM            bool
 	AntiCall          bool
 	AntiDelete        bool
+	AntiChat          bool
 }
 
 func initSettingsDB() {
@@ -75,6 +76,7 @@ func initSettingsDB() {
 	addColumnSafe("bot_settings", "anti_dm", "BOOLEAN DEFAULT 0")
 	addColumnSafe("bot_settings", "anti_call", "BOOLEAN DEFAULT 0")
 	addColumnSafe("bot_settings", "anti_delete", "BOOLEAN DEFAULT 0")
+	addColumnSafe("bot_settings", "anti_chat", "BOOLEAN DEFAULT 0")
 
 	// 3. اینٹی ڈیلیٹ کے لیے میسج کیش ٹیبل
 	createCacheQuery := `
@@ -132,8 +134,8 @@ func getBotSettings(client *whatsmeow.Client) BotSettings {
 
 	var settings BotSettings
 	
-	// 🌟 FIX: SELECT کیوری میں private_antidelete, anti_vv اور anti_dm کا اضافہ کر دیا گیا ہے
-	err := settingsDB.QueryRow("SELECT prefix, mode, uptime_start, always_online, auto_read, auto_react, auto_status, status_react, private_antidelete, anti_vv, anti_dm FROM bot_settings WHERE jid = ?", cleanJID).Scan(
+	// 🌟 FIX: SELECT کیوری میں anti_chat کا اضافہ کر دیا گیا ہے
+	err := settingsDB.QueryRow("SELECT prefix, mode, uptime_start, always_online, auto_read, auto_react, auto_status, status_react, private_antidelete, anti_vv, anti_dm, anti_chat FROM bot_settings WHERE jid = ?", cleanJID).Scan(
 		&settings.Prefix, 
 		&settings.Mode, 
 		&settings.UptimeStart, 
@@ -142,9 +144,10 @@ func getBotSettings(client *whatsmeow.Client) BotSettings {
 		&settings.AutoReact, 
 		&settings.AutoStatus, 
 		&settings.StatusReact, 
-		&settings.PrivateAntiDelete, // 👈 نیا
-		&settings.AntiVV,            // 👈 نیا
-		&settings.AntiDM,            // 👈 نیا
+		&settings.PrivateAntiDelete,
+		&settings.AntiVV,
+		&settings.AntiDM,
+		&settings.AntiChat, // 👈 نیا ویری ایبل یہاں آئے گا
 	)
 	
 	if err == sql.ErrNoRows {
