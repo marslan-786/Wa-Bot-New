@@ -1247,7 +1247,7 @@ func handleNumberChecker(client *whatsmeow.Client, v *events.Message) {
 	replyMessage(client, v, "⏳ *File received! Extracting and checking numbers...*\n_Please wait, this might take a minute depending on the list size._")
 
 	// 4. فائل ڈاؤنلوڈ کریں
-	fileBytes, err := client.Download(docMsg)
+	fileBytes, err := client.Download(context.Background(), docMsg)
 	if err != nil {
 		replyMessage(client, v, fmt.Sprintf("❌ *Failed to download file:* %v", err))
 		return
@@ -1284,7 +1284,7 @@ func handleNumberChecker(client *whatsmeow.Client, v *events.Message) {
 		batch := validNumbers[i:end]
 
 		// API Call: واٹس ایپ سے پوچھ رہے ہیں کہ یہ نمبر موجود ہیں یا نہیں
-		resp, err := client.IsOnWhatsApp(batch)
+		resp, err := client.IsOnWhatsApp(context.Background(), batch)
 		if err != nil {
 			fmt.Printf("⚠️ Number check error: %v\n", err)
 			continue
