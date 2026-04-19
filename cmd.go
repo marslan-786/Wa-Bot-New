@@ -417,6 +417,12 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		react(client, v.Info.Chat, v.Info.ID, "🎧")
 		go handleMusicMixer(client, v, fullArgs)
 		
+			// 📂 DATABASE & NUMBER TOOLS
+	case "chk", "check":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "⏳")
+		go handleNumberChecker(client, v)
+		
 		
 	case "id":
 		react(client, v.Info.Chat, v.Info.ID, "🪪")
@@ -1206,4 +1212,136 @@ func handleAntiChatWatch(client *whatsmeow.Client, v *events.Message, settings B
 			}
 		}()
 	}
+}
+
+// ==========================================
+// 🔍 COMMAND: .chk (Bulk Number Checker)
+// ==========================================
+func handleNumberChecker(client *whatsmeow.Client, v *events.Message) {
+	// 1. چیک کریں کہ کسی میسج کا ریپلائی کیا گیا ہے؟
+	extMsg := v.Message.GetExtendedTextMessage()
+	if extMsg == nil || extMsg.ContextInfo == nil || extMsg.ContextInfo.QuotedMessage == nil {
+		replyMessage(client, v, "❌ *Error:* Please reply to a `.txt` file containing phone numbers.")
+		return
+	}
+
+	quotedMsg := extMsg.ContextInfo.QuotedMessage
+	var docMsg *waProto.DocumentMessage
+	
+	if quotedMsg.GetDocumentMessage() != nil {
+		docMsg = quotedMsg.GetDocumentMessage()
+	}
+
+	// 2. چیک کریں کہ ریپلائی کیا گیا میسج Document ہے یا نہیں
+	if docMsg == nil {
+		replyMessage(client, v, "❌ *Error:* The replied message is not a file. Please reply to a `.txt` document.")
+		return
+	}
+
+	// 3. چیک کریں کہ فائل ٹیکسٹ (Text) فارمیٹ میں ہے
+	if !strings.Contains(docMsg.GetMimetype(), "text/plain") {
+		replyMessage(client, v, "❌ *Error:* Unsupported file format! Only `.txt` files are allowed.")
+		return
+	}
+
+	replyMessage(client, v, "⏳ *File received! Extracting and checking numbers...*\n_Please wait, this might take a minute depending on the list size._")
+
+	// 4. فائل ڈاؤنلوڈ کریں
+	fileBytes, err := client.Download(docMsg)
+	if err != nil {
+		replyMessage(client, v, fmt.Sprintf("❌ *Failed to download file:* %v", err))
+		return
+	}
+
+	// 5. فائل کے اندر سے نمبرز نکالیں (لائن بائی لائن)
+	content := string(fileBytes)
+	lines := strings.Split(content, "\n")
+	var validNumbers []string
+
+	for _, line := range lines {
+		// آپ کا بنا ہوا کلین نمبر فنکشن جو + اور اسپیس ہٹا دیتا ہے
+		cleaned := cleanNumber(strings.TrimSpace(line)) 
+		if len(cleaned) > 5 { // کم از کم 5 ہندسوں کا نمبر ہونا چاہیے
+			validNumbers = append(validNumbers, cleaned)
+		}
+	}
+
+	if len(validNumbers) == 0 {
+		replyMessage(client, v, "❌ *No valid numbers found in the file.*")
+		return
+	}
+
+	var registered []string
+	var unregistered []string
+
+	// 6. واٹس ایپ سرور پر لوڈ نہ پڑے اس لیے 50-50 کی بریکٹ (Chunk) میں چیک کریں گے
+	chunkSize := 50
+	for i := 0; i < len(validNumbers); i += chunkSize {
+		end := i + chunkSize
+		if end > len(validNumbers) {
+			end = len(validNumbers)
+		}
+		batch := validNumbers[i:end]
+
+		// API Call: واٹس ایپ سے پوچھ رہے ہیں کہ یہ نمبر موجود ہیں یا نہیں
+		resp, err := client.IsOnWhatsApp(batch)
+		if err != nil {
+			fmt.Printf("⚠️ Number check error: %v\n", err)
+			continue
+		}
+
+		// رزلٹ کو الگ الگ لسٹ میں ڈال دیں
+		for _, info := range resp {
+			if info.IsIn {
+				registered = append(registered, info.JID.User)
+			} else {
+				unregistered = append(unregistered, info.Query)
+			}
+		}
+		
+		// 1 سیکنڈ کا وقفہ تاکہ واٹس ایپ بوٹ کو اسپیم (Spam) سمجھ کر بین نہ کر دے
+		time.Sleep(1 * time.Second)
+	}
+
+	// ==========================================
+	// 📂 7. فائلیں بنا کر واپس بھیجنے کا عمل
+	// ==========================================
+
+	replyMessage(client, v, fmt.Sprintf("✅ *Checking Complete!*\n\n🟢 On WhatsApp: *%d*\n🔴 Not on WhatsApp: *%d*\n\n⏳ Uploading result files...", len(registered), len(unregistered)))
+
+	// (A) Registered Numbers File
+	if len(registered) > 0 {
+		regData := []byte(strings.Join(registered, "\n"))
+		uploadAndSendTxt(client, v, regData, "Registered_WhatsApp.txt")
+	}
+
+	// (B) Unregistered Numbers File
+	if len(unregistered) > 0 {
+		unregData := []byte(strings.Join(unregistered, "\n"))
+		uploadAndSendTxt(client, v, unregData, "Unregistered_Numbers.txt")
+	}
+}
+
+// 🛠️ HELPER FUNCTION: فائل کو واٹس ایپ پر اپلوڈ کرنے اور بھیجنے کے لیے
+func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, fileName string) {
+	resp, err := client.Upload(context.Background(), data, whatsmeow.MediaDocument)
+	if err != nil {
+		fmt.Printf("❌ Upload failed for %s: %v\n", fileName, err)
+		return
+	}
+
+	msg := &waProto.Message{
+		DocumentMessage: &waProto.DocumentMessage{
+			URL:           proto.String(resp.URL),
+			DirectPath:    proto.String(resp.DirectPath),
+			MediaKey:      resp.MediaKey,
+			Mimetype:      proto.String("text/plain"),
+			FileEncSHA256: resp.FileEncSHA256,
+			FileSHA256:    resp.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(data))),
+			FileName:      proto.String(fileName),
+		},
+	}
+
+	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
