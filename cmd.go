@@ -419,7 +419,6 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		
 			// 📂 DATABASE & NUMBER TOOLS
 	case "chk", "check":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 		react(client, v.Info.Chat, v.Info.ID, "⏳")
 		go handleNumberChecker(client, v)
 		
