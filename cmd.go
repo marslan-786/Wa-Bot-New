@@ -1226,7 +1226,7 @@ func handleNumberChecker(client *whatsmeow.Client, v *events.Message) {
 
 	quotedMsg := extMsg.ContextInfo.QuotedMessage
 	var docMsg *waProto.DocumentMessage
-	
+
 	if quotedMsg.GetDocumentMessage() != nil {
 		docMsg = quotedMsg.GetDocumentMessage()
 	}
@@ -1243,7 +1243,7 @@ func handleNumberChecker(client *whatsmeow.Client, v *events.Message) {
 		return
 	}
 
-	replyMessage(client, v, "⏳ *File received! Extracting and checking numbers...*\n_Please wait, this might take a minute depending on the list size._")
+	replyMessage(client, v, "⏳ *File received! Extracting and checking numbers...*\n_Please wait, checking started in background._")
 
 	// 4. فائل ڈاؤنلوڈ کریں
 	fileBytes, err := client.Download(context.Background(), docMsg)
@@ -1258,9 +1258,8 @@ func handleNumberChecker(client *whatsmeow.Client, v *events.Message) {
 	var validNumbers []string
 
 	for _, line := range lines {
-		// آپ کا بنا ہوا کلین نمبر فنکشن جو + اور اسپیس ہٹا دیتا ہے
-		cleaned := cleanNumber(strings.TrimSpace(line)) 
-		if len(cleaned) > 5 { // کم از کم 5 ہندسوں کا نمبر ہونا چاہیے
+		cleaned := cleanNumber(strings.TrimSpace(line))
+		if len(cleaned) > 5 {
 			validNumbers = append(validNumbers, cleaned)
 		}
 	}
@@ -1270,56 +1269,77 @@ func handleNumberChecker(client *whatsmeow.Client, v *events.Message) {
 		return
 	}
 
-	var registered []string
-	var unregistered []string
+	// 6. بیک گراؤنڈ پروسیسنگ (تاکہ بوٹ ہینگ نہ ہو)
+	go func() {
+		var registered []string
+		var unregistered []string
+		firstBatchSent := false
 
-	// 6. واٹس ایپ سرور پر لوڈ نہ پڑے اس لیے 50-50 کی بریکٹ (Chunk) میں چیک کریں گے
-	chunkSize := 50
-	for i := 0; i < len(validNumbers); i += chunkSize {
-		end := i + chunkSize
-		if end > len(validNumbers) {
-			end = len(validNumbers)
-		}
-		batch := validNumbers[i:end]
+		chunkSize := 50
+		for i := 0; i < len(validNumbers); i += chunkSize {
+			end := i + chunkSize
+			if end > len(validNumbers) {
+				end = len(validNumbers)
+			}
+			batch := validNumbers[i:end]
 
-		// API Call: واٹس ایپ سے پوچھ رہے ہیں کہ یہ نمبر موجود ہیں یا نہیں
-		resp, err := client.IsOnWhatsApp(context.Background(), batch)
-		if err != nil {
-			fmt.Printf("⚠️ Number check error: %v\n", err)
-			continue
-		}
+			// API Call
+			resp, err := client.IsOnWhatsApp(context.Background(), batch)
+			if err != nil {
+				fmt.Printf("⚠️ Number check error: %v\n", err)
+				continue
+			}
 
-		// رزلٹ کو الگ الگ لسٹ میں ڈال دیں
-		for _, info := range resp {
-			if info.IsIn {
-				registered = append(registered, info.JID.User)
+			for _, info := range resp {
+				if info.IsIn {
+					registered = append(registered, info.JID.User)
+				} else {
+					unregistered = append(unregistered, info.Query)
+				}
+			}
+
+			// اگر 100 ان رجسٹرڈ نمبرز مل گئے ہیں اور پہلی فائل ابھی تک سینڈ نہیں ہوئی
+			if !firstBatchSent && len(unregistered) >= 100 {
+				firstBatchSent = true
+				
+				replyMessage(client, v, "✅ *First 100 Unregistered Numbers Found!*\nفائل سینڈ کی جا رہی ہے، آپ کام شروع کریں۔ باقی لسٹ بیک گراؤنڈ میں سلیپ موڈ (Sleep Mode) کے ساتھ چیک ہو رہی ہے تاکہ بین نہ پڑے...")
+
+				// پہلے 100 نمبرز کی فائل بھیجیں
+				first100Data := []byte(strings.Join(unregistered[:100], "\n"))
+				uploadAndSendTxt(client, v, first100Data, "First_100_Unregistered.txt")
+			}
+
+			// Anti-Ban Sleep Logic
+			if !firstBatchSent {
+				// جب تک پہلے 100 نہیں ملتے، 2 سیکنڈ کا نارمل ڈیلے
+				time.Sleep(2 * time.Second)
 			} else {
-				unregistered = append(unregistered, info.Query)
+				// 100 ملنے کے بعد، 10 سے 20 سیکنڈ کا رینڈم ڈیلے (Stealth Mode)
+				sleepTime := time.Duration(rand.Intn(11)+10) * time.Second
+				time.Sleep(sleepTime)
 			}
 		}
-		
-		// 1 سیکنڈ کا وقفہ تاکہ واٹس ایپ بوٹ کو اسپیم (Spam) سمجھ کر بین نہ کر دے
-		time.Sleep(1 * time.Second)
-	}
 
-	// ==========================================
-	// 📂 7. فائلیں بنا کر واپس بھیجنے کا عمل
-	// ==========================================
+		// ==========================================
+		// 📂 7. آخر میں مکمل فائلیں بھیجنے کا عمل
+		// ==========================================
 
-	replyMessage(client, v, fmt.Sprintf("✅ *Checking Complete!*\n\n🟢 On WhatsApp: *%d*\n🔴 Not on WhatsApp: *%d*\n\n⏳ Uploading result files...", len(registered), len(unregistered)))
+		replyMessage(client, v, fmt.Sprintf("✅ *Background Checking Complete!*\n\n🟢 Total On WhatsApp: *%d*\n🔴 Total Not on WhatsApp: *%d*\n\n⏳ Uploading final result files...", len(registered), len(unregistered)))
 
-	// (A) Registered Numbers File
-	if len(registered) > 0 {
-		regData := []byte(strings.Join(registered, "\n"))
-		uploadAndSendTxt(client, v, regData, "Registered_WhatsApp.txt")
-	}
+		// (A) Registered Numbers File
+		if len(registered) > 0 {
+			regData := []byte(strings.Join(registered, "\n"))
+			uploadAndSendTxt(client, v, regData, "All_Registered_WhatsApp.txt")
+		}
 
-	// (B) Unregistered Numbers File
-	if len(unregistered) > 0 {
-		unregData := []byte(strings.Join(unregistered, "\n"))
-		uploadAndSendTxt(client, v, unregData, "Unregistered_Numbers.txt")
-	}
+		// (B) All Unregistered Numbers File (اس میں سارے ان رجسٹرڈ ہوں گے)
+		if len(unregistered) > 0 {
+			unregData := []byte(strings.Join(unregistered, "\n"))
+			uploadAndSendTxt(client, v, unregData, "All_Unregistered_Numbers.txt")
+		}
+	}()
 }
+
 
 // 🛠️ HELPER FUNCTION: فائل کو واٹس ایپ پر اپلوڈ کرنے اور بھیجنے کے لیے
 func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, fileName string) {
