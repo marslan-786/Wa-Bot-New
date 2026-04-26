@@ -1121,7 +1121,7 @@ func handleRVC(client *whatsmeow.Client, v *events.Message) {
 	// یہاں سے ملٹی تھریڈنگ (Goroutine) شروع ہوتی ہے
 	go func(target types.JID, msg *events.Message) {
 		// انتظار کا ری ایکشن (صرف اس تھریڈ کے لیے)
-		react(client, msg.Info.Chat, msg.Info.ID, "⏳")
+		react(client, v, "⏳")
 
 		// 4. آڈیو ڈیٹا ڈاؤن لوڈ کریں
 		audioData, err := client.Download(context.Background(), audioMsg)
@@ -1234,7 +1234,7 @@ func handleRVC(client *whatsmeow.Client, v *events.Message) {
 		})
 
 		// کامیابی کا نشان
-		react(client, msg.Info.Chat, msg.Info.ID, "✅")
+		react(client, v, "✅")
 
 	}(targetJID, v) // گوروٹین کو ویری ایبلز پاس کریں
 }

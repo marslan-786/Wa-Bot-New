@@ -1408,7 +1408,7 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
-// ==========================================
+// ===// ==========================================
 // 🧹 COMMAND: .cleanchannel (The Ultimate Channel Sweeper)
 // ==========================================
 func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string) {
@@ -1425,8 +1425,8 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 	}
 	targetJID, _ := types.ParseJID(cleanID)
 
-	// میسج آئی ڈیز سیو کرنے کے لیے Array
-	var messageIDs []string
+	// میسج آئی ڈیز سیو کرنے کے لیے Array (MessageServerID کو int کے طور پر رکھیں گے)
+	var messageIDs []types.MessageServerID
 	var lastMsgID types.MessageServerID = 0
 
 	// 1. Fetching Loop
@@ -1439,16 +1439,13 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 		if err != nil || len(msgs) == 0 { break }
 
 		for _, msg := range msgs {
-			// میسج کی اصل سٹرنگ ID نکالنا جو ڈیلیٹ کے لیے چاہیے
-			if msg.Message != nil && msg.Message.GetMessage() != nil && msg.Message.GetMessage().GetProtocolMessage() != nil {
-				// یہ تھوڑا نیسٹڈ ہوتا ہے، اس لیے ہم ڈائریکٹ میسج ایونٹ سے ID لیں گے
-				// نوٹ: whatsmeow میں NewsletterMessage سٹرکچر میں ID موجود ہوتی ہے، ہم اسے کیچ کر رہے ہیں۔
-			}
-			// سب سے بیسٹ طریقہ:
-			messageIDs = append(messageIDs, msg.MessageServerID.String()) // یا اگر سٹرنگ ID ہے تو وہ
+			// بس سیدھا MessageServerID کو لسٹ میں ڈال دو
+			messageIDs = append(messageIDs, msg.MessageServerID)
 		}
 		
-		lastMsgID = msgs[len(msgs)-1].ServerID
+		// 🐛 فکس: ServerID کی جگہ MessageServerID
+		lastMsgID = msgs[len(msgs)-1].MessageServerID
+		
 		time.Sleep(500 * time.Millisecond)
 	}
 
@@ -1463,9 +1460,9 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 	// 2. Deletion Loop (Batch Processing with Sleep)
 	go func() {
 		deletedCount := 0
-		for i, idStr := range messageIDs {
-			// سٹرنگ کو MessageID کی ٹائپ میں کنورٹ کیا
-			msgID := types.MessageID(idStr) 
+		for i, serverID := range messageIDs {
+			// 🐛 فکس: Integer ID کو String میں کنورٹ کر کے واٹس ایپ کو بھیجنا ہے
+			msgID := types.MessageID(fmt.Sprintf("%d", serverID)) 
 			
 			// BuildRevoke بنا کر سینڈ کر دیا
 			revokeMsg := client.BuildRevoke(targetJID, types.EmptyJID, msgID)
@@ -1475,13 +1472,11 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 				deletedCount++
 			}
 
-			// 🛡️ ANTI-BAN LOGIC (وی آئی پی ٹرک)
-			// ہر 20 میسج ڈیلیٹ کرنے کے بعد 3 سیکنڈ کا لمبا سانس لے گا
+			// 🛡️ ANTI-BAN LOGIC
 			if (i + 1) % 20 == 0 {
-				time.Sleep(3 * time.Second)
+				time.Sleep(3 * time.Second) // 20 میسج کے بعد 3 سیکنڈ کا پاز
 			} else {
-				// ورنہ ہر میسج کے درمیان ہلکا سا پاز
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(200 * time.Millisecond) // ورنہ ہلکا سا پاز
 			}
 		}
 
