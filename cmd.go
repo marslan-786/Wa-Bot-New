@@ -1,4 +1,4 @@
-package main
+/package main
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	waProto "go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"google.golang.org/protobuf/proto"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"go.mau.fi/whatsmeow/appstate"
@@ -1420,19 +1421,30 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 	}
 	targetJID, _ := types.ParseJID(cleanID)
 
-	replyMessage(client, v, "⏳ *Cleanup Started...*\nمیں 50-50 میسجز کے بیچ (batch) منگوا کر ڈیلیٹ کر رہا ہوں۔ بوٹ بیک گراؤنڈ میں کام کر رہا ہے، جب ختم ہوگا تو بتا دوں گا! 🚀")
+	// 1. سب سے پہلا ٹریکر میسج بھیجیں (جسے بعد میں ہم ایڈیٹ کریں گے)
+	statusText := "🔍 *Channel Cleanup Started...*\n📥 میسجز ملے: 0\n🗑️ ڈیلیٹ کیے: 0\n⏳ سٹیٹس: سرچنگ..."
+	
+	// ہم ڈائریکٹ SendMessage استعمال کر رہے ہیں تاکہ ہمیں اس میسج کی ID مل سکے (ایڈیٹ کرنے کے لیے)
+	msgToSend := &waE2E.Message{Conversation: proto.String(statusText)}
+	sentMsg, err := client.SendMessage(context.Background(), v.Info.Chat, msgToSend)
+	if err != nil {
+		replyMessage(client, v, "❌ ٹریکر میسج بھیجنے میں مسئلہ ہوا۔")
+		return
+	}
+	
+	// اس میسج کی آئی ڈی سیو کر لی تاکہ بعد میں اسے ایڈیٹ کر سکیں
+	statusMsgID := sentMsg.ID
 
-	// پورے پروسیس کو بیک گراؤنڈ میں ڈال دیا تاکہ بوٹ پھنسے نہ
+	// 2. بیک گراؤنڈ پروسیس شروع
 	go func() {
 		var lastMsgID types.MessageServerID = 0
 		seen := make(map[types.MessageServerID]bool)
 		
-		totalDeleted := 0
 		totalFetched := 0
-		var firstError string
+		totalDeleted := 0
 
 		for {
-			// 1. 50 میسجز کی لسٹ منگواؤ
+			// 50 میسج منگواؤ
 			msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{
 				Count:  50,
 				Before: lastMsgID,
@@ -1442,55 +1454,61 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 				break
 			}
 
-			addedNew := false
-
+			// اس بیچ (batch) کی لسٹ بنائیں تاکہ ڈپلیکیٹ نہ ہوں
+			var batchIDs []types.MessageID
 			for _, msg := range msgs {
-
-				// ڈپلیکیٹ چیک
 				if !seen[msg.MessageServerID] {
 					seen[msg.MessageServerID] = true
-					addedNew = true
-					totalFetched++
-
-					// میسج ڈیلیٹ کرنے کی ریکویسٹ
-					revokeMsg := client.BuildRevoke(targetJID, types.EmptyJID, msg.MessageID)
-					_, err := client.SendMessage(context.Background(), targetJID, revokeMsg)
-					
-					if err == nil {
-						totalDeleted++
-					} else if firstError == "" {
-						firstError = err.Error()
-						errorMsg := fmt.Sprintf("❌ *Error on ID %s:* %v", msg.MessageID, err)
-						replyMessage(client, v, errorMsg)
-					}
-
-					// 🛡️ ANTI-BAN LOGIC (ڈیلیٹ کرتے وقت تھوڑا وقفہ)
-					if totalDeleted > 0 && totalDeleted%20 == 0 {
-						time.Sleep(3 * time.Second) // 20 میسجز اڑانے کے بعد لمبا سانس
-					} else {
-						time.Sleep(300 * time.Millisecond) // ورنہ نارمل سپیڈ
-					}
+					batchIDs = append(batchIDs, msg.MessageID)
 				}
 			}
 
-			// اگر اس بیچ (batch) میں کوئی نیا میسج نہیں ملا، تو مطلب سب ختم
-			if !addedNew {
+			if len(batchIDs) == 0 {
 				break
 			}
-
-			// اگلے بیچ کے لیے lastMsgID کو اپڈیٹ کرو
-			lastMsgID = msgs[len(msgs)-1].MessageServerID
 			
-			// واٹس ایپ سرور پر لوڈ نہ پڑے، اس لیے اگلی 50 کی لسٹ منگوانے سے پہلے 1 سیکنڈ کا وقفہ
+			totalFetched += len(batchIDs)
+
+			// 🔄 میسج کو ایڈیٹ کریں (کہ 50 مل گئے ہیں، اب ڈیلیٹ کر رہا ہوں)
+			updateText1 := fmt.Sprintf("🔍 *Scanning & Cleaning...*\n📥 میسجز ملے: %d\n🗑️ ڈیلیٹ کیے: %d\n⏳ سٹیٹس: ڈیلیٹ کر رہا ہوں...", totalFetched, totalDeleted)
+			editMsg1 := client.BuildEdit(v.Info.Chat, statusMsgID, &waE2E.Message{Conversation: proto.String(updateText1)})
+			_, _ = client.SendMessage(context.Background(), v.Info.Chat, editMsg1)
+
+			// 3. ان 50 میسجز کو ڈیلیٹ کرنے کا لوپ
+			for _, msgID := range batchIDs {
+				revokeMsg := client.BuildRevoke(targetJID, types.EmptyJID, msgID)
+				_, err := client.SendMessage(context.Background(), targetJID, revokeMsg)
+				
+				if err == nil {
+					totalDeleted++
+				} else {
+					// 🚫 اگر میسج ڈیلیٹ نہیں ہوا تو کچھ نہیں کرنا، بس چپ چاپ اسکیپ (skip) کر دو
+					continue
+				}
+
+				// Anti-Ban کے لیے تھوڑا وقفہ
+				time.Sleep(300 * time.Millisecond)
+			}
+
+			// 🔄 میسج کو دوبارہ ایڈیٹ کریں (کہ 50 ڈیلیٹ ہو گئے، اب اگلے ڈھونڈ رہا ہوں)
+			updateText2 := fmt.Sprintf("🔍 *Scanning & Cleaning...*\n📥 میسجز ملے: %d\n🗑️ ڈیلیٹ کیے: %d\n⏳ سٹیٹس: مزید ڈھونڈ رہا ہوں...", totalFetched, totalDeleted)
+			editMsg2 := client.BuildEdit(v.Info.Chat, statusMsgID, &waE2E.Message{Conversation: proto.String(updateText2)})
+			_, _ = client.SendMessage(context.Background(), v.Info.Chat, editMsg2)
+
+			// اگلے بیچ کے لیے آئی ڈی سیٹ کریں
+			lastMsgID = msgs[len(msgs)-1].MessageServerID
 			time.Sleep(1 * time.Second) 
 		}
 
-		// 3. فائنل رپورٹ
+		// 4. فائنل سکسیس میسج (آخری ایڈیٹ)
+		var finalText string
 		if totalFetched == 0 {
-			replyMessage(client, v, "✅ کوئی نیا میسج نہیں ملا۔ چینل پہلے سے ہی صاف ہے۔")
+			finalText = "✅ *CLEANUP COMPLETE!*\nکوئی نیا میسج نہیں ملا۔ چینل صاف ہے۔"
 		} else {
-			finalMsg := fmt.Sprintf("✅ *CLEANUP COMPLETE!*\n\nمیں نے %d میسجز سکین کیے اور ان میں سے %d کامیابی سے اڑا دیے ہیں! 🚀", totalFetched, totalDeleted)
-			replyMessage(client, v, finalMsg)
+			finalText = fmt.Sprintf("✅ *CLEANUP COMPLETE!*\n\n📥 کل میسجز ملے: %d\n🗑️ کامیابی سے ڈیلیٹ ہوئے: %d\n🚀 کام مکمل ہو گیا!", totalFetched, totalDeleted)
 		}
+		
+		finalEditMsg := client.BuildEdit(v.Info.Chat, statusMsgID, &waE2E.Message{Conversation: proto.String(finalText)})
+		_, _ = client.SendMessage(context.Background(), v.Info.Chat, finalEditMsg)
 	}()
 }
