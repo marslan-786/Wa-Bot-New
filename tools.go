@@ -25,7 +25,7 @@ func handleScreenshot(client *whatsmeow.Client, v *events.Message, targetUrl str
 		replyMessage(client, v, "⚠️ *Usage:* `.ss https://example.com`")
 		return
 	}
-	react(client, v.Info.Chat, v.Info.ID, "📸")
+	react(client, v, "📸")
 
 	// 1️⃣ لنک تیار کریں (موبائل ویو)
 	apiURL := fmt.Sprintf("https://api.screenshotmachine.com/?key=54be93&device=phone&dimension=1290x2796&url=%s", url.QueryEscape(targetUrl))
@@ -67,7 +67,7 @@ func handleScreenshot(client *whatsmeow.Client, v *events.Message, targetUrl str
 	}
 
 	client.SendMessage(context.Background(), v.Info.Chat, finalMsg)
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }
 
 // ==========================================
@@ -79,7 +79,7 @@ func handleTranslate(client *whatsmeow.Client, v *events.Message, args string) {
 		replyMessage(client, v, "❌ *Usage:* `.tr urdu Text` or reply to a message with `.tr urdu`")
 		return
 	}
-	react(client, v.Info.Chat, v.Info.ID, "🔄")
+	react(client, v, "🔄")
 
 	// 1. زبان کی پہچان
 	langMap := map[string]string{
@@ -139,7 +139,7 @@ func handleTranslate(client *whatsmeow.Client, v *events.Message, args string) {
 
 	if translatedText != "" {
 		replyMessage(client, v, fmt.Sprintf("🌐 *Translation (%s):*\n\n%s", strings.ToUpper(targetLang), translatedText))
-		react(client, v.Info.Chat, v.Info.ID, "✅")
+		react(client, v, "✅")
 	} else {
 		replyMessage(client, v, "❌ Failed to parse translation.")
 	}
@@ -153,7 +153,7 @@ func handleImageGen(client *whatsmeow.Client, v *events.Message, prompt string) 
 		replyMessage(client, v, "❌ *Usage:* `.img A futuristic cyber city at night`")
 		return
 	}
-	react(client, v.Info.Chat, v.Info.ID, "🎨")
+	react(client, v, "🎨")
 
 	// Pollinations.ai (Free Image Gen)
 	apiURL := fmt.Sprintf("https://image.pollinations.ai/prompt/%s?width=1024&height=1024&nologo=true", url.PathEscape(prompt))
@@ -178,7 +178,7 @@ func handleImageGen(client *whatsmeow.Client, v *events.Message, prompt string) 
 			FileLength: proto.Uint64(uint64(len(fileData))),
 		},
 	})
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }
 
 // ==========================================
@@ -186,7 +186,7 @@ func handleImageGen(client *whatsmeow.Client, v *events.Message, prompt string) 
 // ==========================================
 func handleWeather(client *whatsmeow.Client, v *events.Message, city string) {
 	if city == "" { city = "Faisalabad" } // Default City
-	react(client, v.Info.Chat, v.Info.ID, "☁️")
+	react(client, v, "☁️")
 
 	// wttr.in gives beautiful short text responses
 	apiURL := fmt.Sprintf("https://wttr.in/%s?format=%%l:+%%C+%%c+%%t+(Feels+like+%%f)\\nWind:+%%w\\nHumidity:+%%h", url.PathEscape(city))
@@ -197,7 +197,7 @@ func handleWeather(client *whatsmeow.Client, v *events.Message, city string) {
 
 	data, _ := io.ReadAll(resp.Body)
 	replyMessage(client, v, fmt.Sprintf("🌤️ *WEATHER REPORT*\n\n%s\n\n_Powered by Silent Nexus_", string(data)))
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }
 
 // ==========================================
@@ -208,11 +208,11 @@ func handleGoogle(client *whatsmeow.Client, v *events.Message, query string) {
 		replyMessage(client, v, "❌ *Usage:* `.google Silent Hackers`")
 		return
 	}
-	react(client, v.Info.Chat, v.Info.ID, "🔍")
+	react(client, v, "🔍")
 
 	searchLink := fmt.Sprintf("https://www.google.com/search?q=%s", url.QueryEscape(query))
 	
 	msg := fmt.Sprintf("🔍 *GOOGLE SEARCH*\n\n💬 *Query:* %s\n\n🔗 *Click here for results:*\n%s", query, searchLink)
 	replyMessage(client, v, msg)
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }

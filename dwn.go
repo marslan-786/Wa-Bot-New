@@ -111,7 +111,7 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 			case <-doneAnim:
 				return
 			case <-ticker.C:
-				react(client, v.Info.Chat, v.Info.ID, emojis[i%len(emojis)])
+				react(client, v, emojis[i%len(emojis)])
 				i++
 			}
 		}
@@ -202,7 +202,7 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 	stopAnim() 
 
 	if fileSize > int64(MaxWhatsAppSize) && !isAudio {
-		react(client, v.Info.Chat, v.Info.ID, "✂️") 
+		react(client, v, "✂️") 
 		parts, err := splitVideoSmart(tempFileName, SafeMarginMB)
 		if err != nil || len(parts) == 0 {
 			filesToSend = append(filesToSend, tempFileName)
@@ -213,7 +213,7 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 		filesToSend = append(filesToSend, tempFileName)
 	}
 
-	react(client, v.Info.Chat, v.Info.ID, "📤")
+	react(client, v, "📤")
 
 	for i, filePath := range filesToSend {
 		uploadAndSendFile(client, v, filePath, apiRes.Title, isAudio, i+1, len(filesToSend))
@@ -222,7 +222,7 @@ func downloadViaAPI(client *whatsmeow.Client, v *events.Message, targetUrl, reso
 		}
 	}
 
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }
 
 
@@ -258,7 +258,7 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 			case <-doneAnim:
 				return 
 			case <-ticker.C:
-				react(client, v.Info.Chat, v.Info.ID, emojis[i%len(emojis)])
+				react(client, v, emojis[i%len(emojis)])
 				i++
 			}
 		}
@@ -331,7 +331,7 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 	stopAnim()
 
 	if fileSize > int64(MaxWhatsAppSize) && !isAudio {
-		react(client, v.Info.Chat, v.Info.ID, "✂️") 
+		react(client, v, "✂️") 
 		parts, err := splitVideoSmart(tempFileName, SafeMarginMB)
 		if err != nil || len(parts) == 0 {
 			filesToSend = append(filesToSend, tempFileName)
@@ -342,7 +342,7 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 		filesToSend = append(filesToSend, tempFileName)
 	}
 
-	react(client, v.Info.Chat, v.Info.ID, "📤")
+	react(client, v, "📤")
 
 	for i, filePath := range filesToSend {
 		uploadAndSendFile(client, v, filePath, title, isAudio, i+1, len(filesToSend))
@@ -351,7 +351,7 @@ func downloadAndSend(client *whatsmeow.Client, v *events.Message, targetUrl, mod
 		}
 	}
 
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 	fmt.Printf("🎉 [COMPLETED] Successfully sent to user.\n")
 }
 
@@ -382,7 +382,7 @@ func downloadViaYtDlp(client *whatsmeow.Client, v *events.Message, targetUrl str
 			case <-doneAnim:
 				return
 			case <-ticker.C:
-				react(client, v.Info.Chat, v.Info.ID, emojis[i%len(emojis)])
+				react(client, v, emojis[i%len(emojis)])
 				i++
 			}
 		}
@@ -418,7 +418,7 @@ func downloadViaYtDlp(client *whatsmeow.Client, v *events.Message, targetUrl str
 		fmt.Printf("❌ [YT-DLP ERROR]: %v\n", err)
 		// 🔴 FINAL FAILURE: یوزر کو صرف یہاں ایرر میسج جائے گا
 		replyMessage(client, v, "❌ *Download Failed:* System could not process this link.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 
@@ -428,7 +428,7 @@ func downloadViaYtDlp(client *whatsmeow.Client, v *events.Message, targetUrl str
 		stopAnim()
 		fmt.Printf("❌ [YT-DLP FILE ERROR]: File not found after download.\n")
 		replyMessage(client, v, "❌ *Download Failed:* System could not process this link.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 
@@ -439,7 +439,7 @@ func downloadViaYtDlp(client *whatsmeow.Client, v *events.Message, targetUrl str
 	if err != nil {
 		stopAnim()
 		replyMessage(client, v, "❌ *Download Failed:* Error reading file.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 
@@ -450,7 +450,7 @@ func downloadViaYtDlp(client *whatsmeow.Client, v *events.Message, targetUrl str
 	stopAnim()
 
 	if fileSize > int64(MaxWhatsAppSize) && !isAudio {
-		react(client, v.Info.Chat, v.Info.ID, "✂️")
+		react(client, v, "✂️")
 		parts, err := splitVideoSmart(downloadedFile, SafeMarginMB)
 		if err != nil || len(parts) == 0 {
 			filesToSend = append(filesToSend, downloadedFile)
@@ -461,7 +461,7 @@ func downloadViaYtDlp(client *whatsmeow.Client, v *events.Message, targetUrl str
 		filesToSend = append(filesToSend, downloadedFile)
 	}
 
-	react(client, v.Info.Chat, v.Info.ID, "📤")
+	react(client, v, "📤")
 
 	title := "Downloaded Media" // yt-dlp se default title de rahe hain
 	for i, filePath := range filesToSend {
@@ -471,7 +471,7 @@ func downloadViaYtDlp(client *whatsmeow.Client, v *events.Message, targetUrl str
 		}
 	}
 
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 	fmt.Printf("🎉 [YT-DLP COMPLETED] Successfully sent to user.\n")
 }
 
@@ -618,7 +618,7 @@ func splitVideoSmart(inputPath string, targetMB float64) ([]string, error) {
 // ==========================================
 func handleYTS(client *whatsmeow.Client, v *events.Message, query string) {
 	if query == "" { return }
-	react(client, v.Info.Chat, v.Info.ID, "🔍")
+	react(client, v, "🔍")
 
 	// CombinedOutput یوز کر رہے ہیں تاکہ ایرر بھی پکڑ سکیں
 	cmd := exec.Command("yt-dlp", "ytsearch5:"+query, "--flat-playlist", "--print", "%(title)s|||%(id)s")
@@ -631,7 +631,7 @@ func handleYTS(client *whatsmeow.Client, v *events.Message, query string) {
 		
 		fmt.Printf("❌ [YTS ERROR]: %v\nOutput: %s\n", err, errMsg)
 		replyMessage(client, v, fmt.Sprintf("❌ *YouTube Search Error:*\n```\n%s\n```", errMsg))
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return 
 	}
 
@@ -655,7 +655,7 @@ func handleYTS(client *whatsmeow.Client, v *events.Message, query string) {
 
 	if count == 0 { 
 		replyMessage(client, v, "❌ *Error:* No videos found for this search.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return 
 	}
 	menuText += "↬ _Reply with a number (1-5)_"
@@ -669,7 +669,7 @@ func handleYTS(client *whatsmeow.Client, v *events.Message, query string) {
 // ==========================================
 func handleVideoSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	if query == "" { return }
-	react(client, v.Info.Chat, v.Info.ID, "🔍")
+	react(client, v, "🔍")
 
 	// ہم نے --get-id کی جگہ وہی لاجک استعمال کی ہے جو handleYTS میں کام کر رہی ہے
 	cmd := exec.Command("yt-dlp", "ytsearch1:"+query, "--flat-playlist", "--print", "id")
@@ -681,7 +681,7 @@ func handleVideoSearch(client *whatsmeow.Client, v *events.Message, query string
 		
 		fmt.Printf("❌ [VIDEO SEARCH ERROR]: %v\nOutput: %s\n", err, errMsg)
 		replyMessage(client, v, fmt.Sprintf("❌ *Search Error:*\n```\n%s\n```", errMsg))
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 
@@ -689,7 +689,7 @@ func handleVideoSearch(client *whatsmeow.Client, v *events.Message, query string
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if len(lines) == 0 || lines[0] == "" {
 		replyMessage(client, v, "❌ *Error:* No video found for this search.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 
@@ -705,7 +705,7 @@ func handleVideoSearch(client *whatsmeow.Client, v *events.Message, query string
 // ==========================================
 func handlePlayMusic(client *whatsmeow.Client, v *events.Message, query string) {
 	if query == "" { return }
-	react(client, v.Info.Chat, v.Info.ID, "🔍")
+	react(client, v, "🔍")
 
 	// یہاں بھی ہم نے --get-id کو ہٹا کر --print id کر دیا ہے
 	cmd := exec.Command("yt-dlp", "ytsearch1:"+query, "--flat-playlist", "--print", "id")
@@ -717,14 +717,14 @@ func handlePlayMusic(client *whatsmeow.Client, v *events.Message, query string) 
 		
 		fmt.Printf("❌ [PLAY SEARCH ERROR]: %v\nOutput: %s\n", err, errMsg)
 		replyMessage(client, v, fmt.Sprintf("❌ *Search Error:*\n```\n%s\n```", errMsg))
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if len(lines) == 0 || lines[0] == "" {
 		replyMessage(client, v, "❌ *Error:* No audio found for this search.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 
@@ -826,7 +826,7 @@ func HandleMenuReplies(client *whatsmeow.Client, v *events.Message, bodyClean st
 // ==========================================
 func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	if query == "" { return }
-	react(client, v.Info.Chat, v.Info.ID, "🔍")
+	react(client, v, "🔍")
 
 	// Python Script چلائیں
 	cmd := exec.Command("python3", "tiktok_search.py", query)
@@ -837,7 +837,7 @@ func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 
 	if err != nil { 
 		fmt.Printf("❌ [GO] Execution Error: %v\n", err)
-		react(client, v.Info.Chat, v.Info.ID, "❌") 
+		react(client, v, "❌") 
 		return 
 	}
 
@@ -853,7 +853,7 @@ func handleTTSearch(client *whatsmeow.Client, v *events.Message, query string) {
 	if jsonErr != nil {
 		if err2 := json.Unmarshal(out, &results); err2 != nil {
 			fmt.Printf("❌ [GO] JSON Parse Error: %v\nRaw Output: %s\n", jsonErr, string(out))
-			react(client, v.Info.Chat, v.Info.ID, "❌")
+			react(client, v, "❌")
 			return
 		}
 	}
@@ -940,7 +940,7 @@ func handleUniversalDownload(client *whatsmeow.Client, v *events.Message, url st
 	}
 
 	// 1. صرف ری ایکشن دیں (پروفیشنل لک کے لیے)
-	react(client, v.Info.Chat, v.Info.ID, emoji)
+	react(client, v, emoji)
 
 	// 2. ماسٹر ڈاؤنلوڈر کو اوریجنل لنک بھیج دیں
 	go downloadAndSend(client, v, url, mode)

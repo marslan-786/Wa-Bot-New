@@ -62,7 +62,7 @@ func handleAICommand(client *whatsmeow.Client, v *events.Message, query string, 
 		return
 	}
 
-	react(client, v.Info.Chat, v.Info.ID, "🧠")
+	react(client, v, "🧠")
 
 	// 3️⃣ بیس رولز جو کبھی تبدیل نہیں ہوں گے (یہ ہر موڈ کے ساتھ چپکے رہیں گے)
 	baseRules := `
@@ -100,13 +100,13 @@ STRICT SYSTEM RULES (FOLLOW THESE NO MATTER YOUR PERSONA):
 }
 
 func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISession) {
-	react(client, v.Info.Chat, v.Info.ID, "⏳")
+	react(client, v, "⏳")
 
 	apiKey := os.Getenv("GROQ_API_KEY")
 	if apiKey == "" {
 		fmt.Println("❌ [AI ERROR] GROQ_API_KEY is missing in Environment Variables!")
 		replyMessage(client, v, "❌ System Error: API Key is missing. Developer ko batao!")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 
@@ -129,7 +129,7 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 	if err != nil {
 		fmt.Printf("❌ [AI NETWORK ERROR]: %v\n", err)
 		replyMessage(client, v, "❌ Network issue while connecting to AI Engine.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 	defer resp.Body.Close()
@@ -138,7 +138,7 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 		errorBody, _ := io.ReadAll(resp.Body)
 		fmt.Printf("❌ [GROQ API ERROR] Status: %d\nResponse: %s\n", resp.StatusCode, string(errorBody))
 		replyMessage(client, v, "❌ AI Engine is currently resting or busy. Check console logs.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 
@@ -165,10 +165,10 @@ func processAndSendAI(client *whatsmeow.Client, v *events.Message, session AISes
 			}(msgID)
 		}
 
-		react(client, v.Info.Chat, v.Info.ID, "✅")
+		react(client, v, "✅")
 	} else {
 		replyMessage(client, v, "❌ Got an empty response from AI.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 	}
 }
 

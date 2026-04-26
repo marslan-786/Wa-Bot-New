@@ -101,7 +101,7 @@ func handleGroupToggle(client *whatsmeow.Client, v *events.Message, settingName 
 	query := fmt.Sprintf("UPDATE group_settings SET %s = ? WHERE group_jid = ?", dbColumn)
 	settingsDB.Exec(query, state, v.Info.Chat.User)
 	
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 	replyMessage(client, v, fmt.Sprintf("✅ *%s* is now turned *%s* for this group.", settingName, strings.ToUpper(args)))
 }
 
@@ -153,7 +153,7 @@ func handleKick(client *whatsmeow.Client, v *events.Message, args string) {
 		replyMessage(client, v, "❌ Action Failed! I am probably not an Admin.")
 		return
 	}
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }
 
 // ➕ Add (With Privacy Check Fix)
@@ -181,7 +181,7 @@ func handleAdd(client *whatsmeow.Client, v *events.Message, args string) {
 		}
 	}
 	
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 	replyMessage(client, v, "✅ User added successfully!")
 }
 
@@ -194,7 +194,7 @@ func handlePromote(client *whatsmeow.Client, v *events.Message, args string) {
 	if err != nil { 
 		replyMessage(client, v, "❌ Action Failed! I am probably not an Admin.") 
 	} else { 
-		react(client, v.Info.Chat, v.Info.ID, "✅") // 🛠️ FIX: React Arguments
+		react(client, v, "✅") // 🛠️ FIX: React Arguments
 	}
 }
 
@@ -207,7 +207,7 @@ func handleDemote(client *whatsmeow.Client, v *events.Message, args string) {
 	if err != nil { 
 		replyMessage(client, v, "❌ Action Failed! I am probably not an Admin.") 
 	} else { 
-		react(client, v.Info.Chat, v.Info.ID, "✅") // 🛠️ FIX: React Arguments
+		react(client, v, "✅") // 🛠️ FIX: React Arguments
 	}
 }
 
@@ -223,7 +223,7 @@ func handleGroupState(client *whatsmeow.Client, v *events.Message, state string)
 	if err != nil { 
 		replyMessage(client, v, "❌ Action Failed! I am probably not an Admin.") 
 	} else { 
-		react(client, v.Info.Chat, v.Info.ID, "✅") // 🛠️ FIX: React Arguments
+		react(client, v, "✅") // 🛠️ FIX: React Arguments
 	}
 }
 
@@ -349,7 +349,7 @@ func handleVV(client *whatsmeow.Client, v *events.Message) {
 		return
 	}
 	
-	react(client, v.Info.Chat, v.Info.ID, "🚀")
+	react(client, v, "🚀")
 	client.SendMessage(context.Background(), v.Info.Chat, &msg)
 }
 

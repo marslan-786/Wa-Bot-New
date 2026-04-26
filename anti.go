@@ -66,7 +66,7 @@ func handleAntiDeleteToggle(client *whatsmeow.Client, v *events.Message, args st
 		}
 		
 		settingsDB.Exec("UPDATE personal_log_settings SET anti_delete_group = ? WHERE bot_jid = ?", chatJID, botJID)
-		react(client, v.Info.Chat, v.Info.ID, "✅")
+		react(client, v, "✅")
 		replyMessage(client, v, "✅ *Personal Log Group Activated!* Private deleted messages will now be forwarded here.")
 		
 	} else if args == "off" {
@@ -76,7 +76,7 @@ func handleAntiDeleteToggle(client *whatsmeow.Client, v *events.Message, args st
 		}
 		
 		settingsDB.Exec("UPDATE personal_log_settings SET anti_delete_group = '' WHERE bot_jid = ?", botJID)
-		react(client, v.Info.Chat, v.Info.ID, "✅")
+		react(client, v, "✅")
 		replyMessage(client, v, "❌ *Personal Log Group Deactivated!* Anti-Delete forwarding is now OFF.")
 	}
 }
@@ -114,12 +114,12 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 			return
 		}
 		settingsDB.Exec("UPDATE personal_log_settings SET anti_vv_group = ? WHERE bot_jid = ?", chatJID, botJID)
-		react(client, v.Info.Chat, v.Info.ID, "✅")
+		react(client, v, "✅")
 		replyMessage(client, v, "✅ *Stealth Log Group Activated!* Media extracted via trigger word will be forwarded here.")
 		
 	} else if cmd == "off" {
 		settingsDB.Exec("UPDATE personal_log_settings SET anti_vv_group = '' WHERE bot_jid = ?", botJID)
-		react(client, v.Info.Chat, v.Info.ID, "✅")
+		react(client, v, "✅")
 		replyMessage(client, v, "❌ *Stealth Log Group Deactivated!*")
 		
 	} else if cmd == "set" {
@@ -129,7 +129,7 @@ func handleAntiVVToggle(client *whatsmeow.Client, v *events.Message, args string
 		}
 		triggerWord := strings.ToLower(parts[1])
 		settingsDB.Exec("UPDATE personal_log_settings SET anti_vv_trigger = ? WHERE bot_jid = ?", triggerWord, botJID)
-		react(client, v.Info.Chat, v.Info.ID, "✅")
+		react(client, v, "✅")
 		replyMessage(client, v, fmt.Sprintf("🕵️ *Stealth Trigger Set!*\nNow, replying to any media with exactly *\"%s\"* will secretly forward it to your Log Group.", triggerWord))
 		
 	} else {

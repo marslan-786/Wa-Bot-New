@@ -57,7 +57,7 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 	fmt.Printf("===================================================\n")
 	fmt.Printf("🔍 1. Search Query: '%s'\n", searchQuery)
 
-	react(client, v.Info.Chat, v.Info.ID, "⏳")
+	react(client, v, "⏳")
 
 	// 3. عارضی فائل نیمز
 	timestamp := time.Now().UnixNano()
@@ -165,7 +165,7 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 	mFile.Close()
 	fmt.Printf("✅ 7. MP3 Downloaded and Saved successfully.\n")
 
-	react(client, v.Info.Chat, v.Info.ID, "🎛️") 
+	react(client, v, "🎛️") 
 
 	// ==========================================
 	// 🎚️ STEP E: FFmpeg VIP مکسنگ (HIGH BASS, ECHO & VIBRATO)
@@ -236,7 +236,7 @@ func handleMusicMixer(client *whatsmeow.Client, v *events.Message, args string) 
 		},
 	})
 
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 	fmt.Printf("🎉 [MUSIC MIXER] PROCESS FINISHED SUCCESSFULLY!\n")
 	fmt.Printf("===================================================\n\n")
 }

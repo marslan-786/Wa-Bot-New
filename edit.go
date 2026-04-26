@@ -63,7 +63,7 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 		return
 	}
 
-	react(client, v.Info.Chat, v.Info.ID, "⏳")
+	react(client, v, "⏳")
 
 	tempIn := fmt.Sprintf("./data/temp_in_%d%s", time.Now().UnixNano(), ext)
 	tempOut := fmt.Sprintf("./data/temp_out_%d.webp", time.Now().UnixNano())
@@ -118,7 +118,7 @@ func handleSticker(client *whatsmeow.Client, v *events.Message) {
 			},
 		},
 	})
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }
 
 
@@ -134,7 +134,7 @@ func handleToImg(client *whatsmeow.Client, v *events.Message) {
 		replyMessage(client, v, "❌ Please reply to a Sticker.")
 		return
 	}
-	react(client, v.Info.Chat, v.Info.ID, "⏳")
+	react(client, v, "⏳")
 
 	tempIn := fmt.Sprintf("./data/in_%d.webp", time.Now().UnixNano())
 	tempOut := fmt.Sprintf("./data/out_%d.png", time.Now().UnixNano()) // 🌟 PNG transparency بچانے کے لیے
@@ -158,7 +158,7 @@ func handleToImg(client *whatsmeow.Client, v *events.Message) {
 			ContextInfo: &waProto.ContextInfo{ StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message },
 		},
 	})
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }
 
 
@@ -171,7 +171,7 @@ func handleToVideo(client *whatsmeow.Client, v *events.Message, isGif bool) {
 		replyMessage(client, v, "❌ Please reply to an Animated Sticker.")
 		return
 	}
-	react(client, v.Info.Chat, v.Info.ID, "⏳")
+	react(client, v, "⏳")
 
 	inputWebP := fmt.Sprintf("./data/in_%d.webp", time.Now().UnixNano())
 	tempGif := fmt.Sprintf("./data/temp_%d.gif", time.Now().UnixNano())
@@ -220,7 +220,7 @@ func handleToVideo(client *whatsmeow.Client, v *events.Message, isGif bool) {
 			ContextInfo: &waProto.ContextInfo{ StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message },
 		},
 	})
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }
 
 // ==========================================
@@ -232,7 +232,7 @@ func handleToUrl(client *whatsmeow.Client, v *events.Message) {
 		replyMessage(client, v, "❌ Please reply to any Image, Video, or Sticker to upload.")
 		return
 	}
-	react(client, v.Info.Chat, v.Info.ID, "⏳")
+	react(client, v, "⏳")
 
 	tempFile := fmt.Sprintf("./data/upload_%d%s", time.Now().UnixNano(), ext)
 	os.WriteFile(tempFile, data, 0644)
@@ -259,7 +259,7 @@ func handleToUrl(client *whatsmeow.Client, v *events.Message) {
 
 	linkData, _ := io.ReadAll(resp.Body)
 	replyMessage(client, v, fmt.Sprintf("🌐 *Media Uploaded!*\n\n🔗 *URL:* %s", string(linkData)))
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }
 
 // ==========================================
@@ -273,7 +273,7 @@ func handleToPTT(client *whatsmeow.Client, v *events.Message, args string) {
 		replyMessage(client, v, "❌ Please provide text.\n*Example:* `.toptt kiya hal ha`\n*With Language:* `.toptt en Hello bro`")
 		return
 	}
-	react(client, v.Info.Chat, v.Info.ID, "🎙️")
+	react(client, v, "🎙️")
 
 	// 1. زبان چیک کریں
 	parts := strings.Fields(args)
@@ -352,7 +352,7 @@ func handleToPTT(client *whatsmeow.Client, v *events.Message, args string) {
 			ContextInfo: &waProto.ContextInfo{ StanzaID: proto.String(v.Info.ID), Participant: proto.String(v.Info.Sender.String()), QuotedMessage: v.Message },
 		},
 	})
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }
 
 
@@ -364,7 +364,7 @@ func handleFancy(client *whatsmeow.Client, v *events.Message, args string) {
 		replyMessage(client, v, "❌ Please provide text.\nExample: `.fancy Silent Hackers`")
 		return
 	}
-	react(client, v.Info.Chat, v.Info.ID, "✨")
+	react(client, v, "✨")
 
 	// 💎 50+ Premium Fonts Mapped Directly
 	fontsList := []string{

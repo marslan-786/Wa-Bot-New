@@ -243,12 +243,12 @@ func handleToggleSettings(client *whatsmeow.Client, v *events.Message, columnNam
 	_, err := settingsDB.Exec(query, state, cleanJID)
 
 	if err != nil {
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		replyMessage(client, v, "❌ Database error!")
 		return
 	}
 
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 	
 	// خوبصورت ریپلائی بنانے کے لیے (مثلاً "anti_dm" کو "ANTI DM" کر دے گا)
 	featureName := strings.ReplaceAll(strings.ToUpper(columnName), "_", " ")
