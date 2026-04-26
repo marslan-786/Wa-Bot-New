@@ -1380,6 +1380,7 @@ func handleNumberChecker(client *whatsmeow.Client, v *events.Message) {
 }
 
 
+
 // 🛠️ HELPER FUNCTION: فائل کو واٹس ایپ پر اپلوڈ کرنے اور بھیجنے کے لیے
 func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, fileName string) {
 	resp, err := client.Upload(context.Background(), data, whatsmeow.MediaDocument)
@@ -1404,33 +1405,38 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
+
 // ==========================================
-// 🧪 COMMAND: .test (Ultimate Bypass Tester V4 - Modern Edition)
+// 🧪 COMMAND: .test (Ultimate Bypass Tester V5 - The Renderer Edition)
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *INITIALIZING THE MODERN ARSENAL (V4)...*\n\n_Legacy methods removed. Firing 6 latest payload structures including Carousel & Raw Injection. Monitor your terminal!_ 🚀")
+	replyMessage(client, v, "⏳ *INITIALIZING THE RENDERER ARSENAL (V5)...*\n\n_Using ViewOnce & FutureProof wrappers to force client-side rendering. Let's see if the app shows the buttons!_ 🚀")
 	
 	targetJID := v.Info.Chat
 	testLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
+	channelName := "Silent Hackers"
 	
-	// ReadMore String Generator
 	readMore := ""
 	for i := 0; i < 150; i++ {
 		readMore += "\u200E\u200F"
 	}
 
-	// ----------------------------------------------------
-	// 🧬 METHOD 6 LOGIC: RAW PROTOBUF INJECTION
-	// ----------------------------------------------------
-	baileysRawBase64 := "CjwKIlNpbGVudCBIYWNrZXJzIENoYW5uZWwgUmF3IFRlc3QaEgoQUG93ZXJlZCBieSBBcnNsYW4=" 
-	rawBytes, _ := base64.StdEncoding.DecodeString(baileysRawBase64)
-	
-	rawInjectedMsg := &waProto.Message{}
-	proto.Unmarshal(rawBytes, rawInjectedMsg) 
-	
-	if rawInjectedMsg.Conversation == nil && rawInjectedMsg.ExtendedTextMessage == nil && rawInjectedMsg.InteractiveMessage == nil {
-	    rawInjectedMsg.Conversation = proto.String("🧪 Method 6: Raw Base64 Injection Triggered (Check Console)")
+	// 🛠️ BUTTON PARAMETERS (JSON FORMAT)
+	urlParams := map[string]interface{}{
+		"display_text":  "Join Channel",
+		"url":           testLink,
+		"merchant_url":  testLink,
+		"id":            "url_btn_1",
 	}
+	urlParamsJSON, _ := json.Marshal(urlParams)
+
+	copyParams := map[string]string{
+		"display_text": "Copy Code",
+		"copy_code":    "SILENT_VIP",
+		"id":           "copy_btn_1",
+	}
+	copyParamsJSON, _ := json.Marshal(copyParams)
+
 
 	// 🛠️ METHODS DEFINITION
 	type payloadTest struct {
@@ -1439,27 +1445,84 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 	}
 
 	tests := []payloadTest{
-		// 🚀 METHOD 1: The Modern Native Flow (cta_url)
+		// 🚀 METHOD 1: Wrapper URL Button (Forces Android Rendering)
 		{
-			MethodName: "Method 1: Modern Native Flow (cta_url)",
+			MethodName: "Method 1: Wrapper URL Button (FutureProof)",
 			Message: &waProto.Message{
-				InteractiveMessage: &waProto.InteractiveMessage{
-					Header: &waProto.InteractiveMessage_Header{
-						Title:              proto.String("🧪 M1: Native Flow"),
-						HasMediaAttachment: proto.Bool(false),
+				// 🔥 The Magic: Wrapping inside ViewOnce/FutureProof
+				ViewOnceMessage: &waProto.FutureProofMessage{
+					Message: &waProto.Message{
+						InteractiveMessage: &waProto.InteractiveMessage{
+							Header: &waProto.InteractiveMessage_Header{
+								Title:              proto.String("🧪 Wrapper URL Test"),
+								Subtitle:           proto.String(channelName),
+								HasMediaAttachment: proto.Bool(false),
+							},
+							Body: &waProto.InteractiveMessage_Body{
+								Text: proto.String("یہ بٹن موبائل ایپ کو زبردستی رینڈر کرنے پر مجبور کرتا ہے۔"),
+							},
+							Footer: &waProto.InteractiveMessage_Footer{
+								Text: proto.String("Powered by Arslan"),
+							},
+							InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
+								NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
+									Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
+										{
+											Name:             proto.String("cta_url"),
+											ButtonParamsJSON: proto.String(string(urlParamsJSON)),
+										},
+									},
+									MessageParamsJSON: proto.String(`{"name":"galaxy_message"}`),
+									MessageVersion:    proto.Int32(1), // version 1 is usually safer
+								},
+							},
+							// Newsletter Forward Spoofing (Adds Trust)
+							ContextInfo: &waProto.ContextInfo{
+								IsForwarded: proto.Bool(true),
+								ForwardedNewsletterMessageInfo: &waProto.ContextInfo_ForwardedNewsletterMessageInfo{
+									NewsletterJID:   proto.String("120363421646654726@newsletter"),
+									ServerMessageID: proto.Int32(100),
+									NewsletterName:  proto.String(channelName),
+								},
+							},
+						},
 					},
-					Body: &waProto.InteractiveMessage_Body{
-						Text: proto.String("یہ واٹس ایپ کا لیٹسٹ کلاؤڈ API میتھڈ ہے۔"),
+				},
+				// Device Metadata for Android bypassing
+				MessageContextInfo: &waProto.MessageContextInfo{
+					DeviceListMetadata: &waProto.DeviceListMetadata{
+						RecipientKeyHash:    []byte{},
+						RecipientTimestamp:  proto.Uint64(uint64(time.Now().Unix())),
+						RecipientKeyIndexes: []uint32{},
 					},
-					Footer: &waProto.InteractiveMessage_Footer{
-						Text: proto.String("Silent Hackers"),
-					},
-					InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
-						NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
-							Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
-								{
-									Name: proto.String("cta_url"),
-									ButtonParamsJSON: proto.String(fmt.Sprintf(`{"display_text":"Join Channel","url":"%s"}`, testLink)),
+					DeviceListMetadataVersion: proto.Int32(2),
+				},
+			},
+		},
+		// 🚀 METHOD 2: Wrapper Copy Button
+		{
+			MethodName: "Method 2: Wrapper Copy Button",
+			Message: &waProto.Message{
+				ViewOnceMessage: &waProto.FutureProofMessage{
+					Message: &waProto.Message{
+						InteractiveMessage: &waProto.InteractiveMessage{
+							Header: &waProto.InteractiveMessage_Header{
+								Title:              proto.String("🧪 Wrapper Copy Test"),
+								HasMediaAttachment: proto.Bool(false),
+							},
+							Body: &waProto.InteractiveMessage_Body{
+								Text: proto.String("کاپی بٹن ٹیسٹ۔ اس پر کلک کرنے سے کوڈ کاپی ہونا چاہیے۔"),
+							},
+							InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
+								NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
+									Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
+										{
+											Name:             proto.String("cta_copy"),
+											ButtonParamsJSON: proto.String(string(copyParamsJSON)),
+										},
+									},
+									MessageParamsJSON: proto.String(`{"name":"galaxy_message"}`),
+									MessageVersion:    proto.Int32(1),
 								},
 							},
 						},
@@ -1467,34 +1530,38 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 				},
 			},
 		},
-		// 🚀 METHOD 2: The New Carousel Bypass (Cards)
+		// 🚀 METHOD 3: The Carousel Cards Wrapper
 		{
-			MethodName: "Method 2: Carousel Message (Cards Bypass)",
+			MethodName: "Method 3: Wrapper Carousel Cards",
 			Message: &waProto.Message{
-				InteractiveMessage: &waProto.InteractiveMessage{
-					Body: &waProto.InteractiveMessage_Body{
-						Text: proto.String("🧪 M2: Carousel Bypass\nیہ کیٹلاگ سٹائل ہے جو بین سے بچاتا ہے۔"),
-					},
-					Footer: &waProto.InteractiveMessage_Footer{
-						Text: proto.String("Swipe Left 👈"),
-					},
-					InteractiveMessage: &waProto.InteractiveMessage_CarouselMessage_{
-						CarouselMessage: &waProto.InteractiveMessage_CarouselMessage{
-							Cards: []*waProto.InteractiveMessage{
-								{
-									Header: &waProto.InteractiveMessage_Header{
-										Title: proto.String("VIP Server 1"),
-										HasMediaAttachment: proto.Bool(false),
-									},
-									Body: &waProto.InteractiveMessage_Body{
-										Text: proto.String("Click below to join."),
-									},
-									InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
-										NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
-											Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
-												{
-													Name: proto.String("cta_url"),
-													ButtonParamsJSON: proto.String(fmt.Sprintf(`{"display_text":"Go To Link","url":"%s"}`, testLink)),
+				ViewOnceMessage: &waProto.FutureProofMessage{
+					Message: &waProto.Message{
+						InteractiveMessage: &waProto.InteractiveMessage{
+							Body: &waProto.InteractiveMessage_Body{
+								Text: proto.String("🧪 Carousel Wrapper\nاسے سوائپ (Swipe) کریں۔"),
+							},
+							Footer: &waProto.InteractiveMessage_Footer{
+								Text: proto.String("Silent Hackers"),
+							},
+							InteractiveMessage: &waProto.InteractiveMessage_CarouselMessage_{
+								CarouselMessage: &waProto.InteractiveMessage_CarouselMessage{
+									Cards: []*waProto.InteractiveMessage{
+										{
+											Header: &waProto.InteractiveMessage_Header{
+												Title: proto.String("Card 1"),
+												HasMediaAttachment: proto.Bool(false),
+											},
+											Body: &waProto.InteractiveMessage_Body{
+												Text: proto.String("Join Channel inside."),
+											},
+											InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
+												NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
+													Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
+														{
+															Name:             proto.String("cta_url"),
+															ButtonParamsJSON: proto.String(string(urlParamsJSON)),
+														},
+													},
 												},
 											},
 										},
@@ -1506,32 +1573,6 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 				},
 			},
 		},
-		// 🚀 METHOD 3: Legacy List Message (Menu Style - Still supported)
-		{
-			MethodName: "Method 3: Legacy List Message",
-			Message: &waProto.Message{
-				ListMessage: &waProto.ListMessage{
-					Title:       proto.String("🧪 M3: List Message"),
-					Description: proto.String("یہ مینیو والا طریقہ ہے۔"),
-					ButtonText:  proto.String("Tap Here"),
-					ListType:    waProto.ListMessage_SINGLE_SELECT.Enum(),
-					Sections: []*waProto.ListMessage_Section{
-						{
-							Title: proto.String("Links"),
-							Rows: []*waProto.ListMessage_Row{
-								{
-									Title:       proto.String("Channel Link"),
-									RowID:       proto.String("link_1"),
-									Description: proto.String("یہ ریپلائی کرے گا، ڈائریکٹ نہیں کھولے گا۔"),
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		// 🔥 Legacy Buttons and Hydrated Templates are REMOVED because they don't exist in latest protobufs anymore.
-
 		// 🚀 METHOD 4: Extended Text (Link Spoofing)
 		{
 			MethodName: "Method 4: Link Spoofing",
@@ -1544,19 +1585,14 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 				},
 			},
 		},
-		// 🚀 METHOD 5: The Undefeatable (Read More Glitch)
+		// 🚀 METHOD 5: Read More Glitch
 		{
 			MethodName: "Method 5: Read More Glitch",
 			Message: &waProto.Message{
 				ExtendedTextMessage: &waProto.ExtendedTextMessage{
-					Text: proto.String(fmt.Sprintf("🧪 M5: Read More Glitch\nسب سے سیف اور 100%% ورکنگ میتھڈ۔%s\n%s", readMore, testLink)),
+					Text: proto.String(fmt.Sprintf("🧪 M5: Read More Glitch\nہمیشہ کام کرنے والا میتھڈ۔%s\n%s", readMore, testLink)),
 				},
 			},
-		},
-		// 🚀 METHOD 6: THE RAW INJECTION
-		{
-			MethodName: "Method 6: Raw Protobuf Injection",
-			Message:    rawInjectedMsg,
 		},
 	}
 
@@ -1584,5 +1620,5 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		time.Sleep(4 * time.Second)
 	}
 
-	replyMessage(client, v, "✅ *TESTING COMPLETED!*\n_Check terminal for Raw JSON payloads._")
+	replyMessage(client, v, "✅ *RENDERER TESTING COMPLETED!*\n_Check your WhatsApp chat. If the buttons are visible, the ViewOnce wrapper successfully bypassed the client-side restrictions!_")
 }
