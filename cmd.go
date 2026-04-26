@@ -1406,7 +1406,6 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
-
 // ==========================================
 // 🧪 COMMAND: .test (Link Preview & View Channel Card Enforcer)
 // ==========================================
@@ -1436,9 +1435,8 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 				ExtendedTextMessage: &waE2E.ExtendedTextMessage{
 					// 🔥 اس ٹیکسٹ میں کوئی لنک نہیں ہے
 					Text:         proto.String("✨ *VIP OTP ALERT* ✨\n\nاس میسج کے ٹیکسٹ میں کوئی لنک نہیں ہے، لیکن ہم نے میٹا ڈیٹا کے ذریعے پریویو (Preview) فورس کیا ہے تاکہ نیچے 'View Channel' کا کارڈ آئے۔"),
-					// 🔥 یہ وہ فیلڈز ہیں جو پریویو کارڈ بناتی ہیں
+					// 🔥 CanonicalUrl ہٹا دیا گیا ہے، اب صرف یہ فیلڈز کافی ہیں
 					MatchedText:  proto.String(testLink),
-					CanonicalUrl: proto.String(testLink), // 👈 اس کا صحیح نام CanonicalUrl ہے
 					Title:        proto.String("Silent Hackers VIP"),
 					Description:  proto.String("Official Channel"),
 				},
@@ -1451,9 +1449,8 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 				ExtendedTextMessage: &waE2E.ExtendedTextMessage{
 					// 🔥 ٹیکسٹ، ریڈ مور کریکٹرز اور آخر میں لنک
 					Text:         proto.String(fmt.Sprintf("✨ *VIP OTP ALERT* ✨\nیہ ریڈ مور (Read More) والا میتھڈ ہے۔%s\n%s", readMore, testLink)),
-					// 🔥 اور یہاں پھر سے پریویو کا میٹا ڈیٹا
+					// 🔥 CanonicalUrl ہٹا دیا گیا ہے
 					MatchedText:  proto.String(testLink),
-					CanonicalUrl: proto.String(testLink),
 					Title:        proto.String("Silent Hackers VIP"),
 					Description:  proto.String("Join us today!"),
 				},
