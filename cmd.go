@@ -1446,7 +1446,8 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 			addedNew := false
 
 			// 2. جو 50 (یا اس سے کم) میسجز ملے ہیں، ان کو ایک ایک کر کے اڑاؤ
-			for i, msg := range msgs {
+			for _, msg := range msgs {
+
 				// ڈپلیکیٹ چیک
 				if !seen[msg.MessageServerID] {
 					seen[msg.MessageServerID] = true
