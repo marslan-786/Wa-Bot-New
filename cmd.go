@@ -1414,49 +1414,44 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message, args string) {
 	if args == "" {
-		replyMessage(client, v, "❌ *Error:* یار چینل کی آئی ڈی تو دو!\nمثال: `.test 123456789@newsletter` یا صرف `.test 123456789`")
+		replyMessage(client, v, "❌ *Error:* یار چینل کی آئی ڈی دو!")
 		return
 	}
 
-	replyMessage(client, v, "⏳ *Scanning Channel...*\nیار میں چینل کے سرور سے ہسٹری فیچ کر رہا ہوں، تھوڑا ویٹ کرو...")
+	replyMessage(client, v, "⏳ *Scanning...* میں میسجز گن رہا ہوں، ذرا صبر کرو...")
 
-	// 1. چینل کی JID (ID) بنانا
 	cleanID := strings.TrimSpace(args)
 	if !strings.Contains(cleanID, "@newsletter") {
 		cleanID = cleanID + "@newsletter"
 	}
 	
-	targetJID, err := types.ParseJID(cleanID)
-	if err != nil || targetJID.Server != types.NewsletterServer {
-		replyMessage(client, v, "❌ *Invalid ID:* چینل کی آئی ڈی غلط لگ رہی ہے۔")
-		return
-	}
-
-	// 2. کاؤنٹنگ اور لوپ کے ویری ایبلز
+	targetJID, _ := types.ParseJID(cleanID)
 	totalCount := 0
+	var lastMsgID types.NewsletterMessageServerID = 0 // یہاں سے ہم ٹریک رکھیں گے
 
-	// 3. Pagination Loop (جب تک سارے میسج نہ مل جائیں، ڈھونڈتا رہے گا)
 	for {
-		// whatsmeow کا آفیشل نیوز لیٹر فیچ فنکشن (ایک بار میں 100 میسج)
-		msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{Count: 100})
+		// فکس: یہاں ہم 'Before' پیرامیٹر استعمال کر رہے ہیں تاکہ اگلے میسجز ملیں
+		msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{
+			Count: 50, // 50-50 کرکے نکالنا زیادہ سیف ہے
+			Before: lastMsgID, 
+		})
 		
-		if err != nil {
-			replyMessage(client, v, fmt.Sprintf("❌ ہسٹری نکالنے میں مسئلہ آیا: %v\nکیا بوٹ اس چینل میں ایڈمن ہے؟", err))
-			return
-		}
-
-		// اگر کوئی نیا میسج نہیں ملا، تو لوپ توڑ دو
-		if len(msgs) == 0 {
+		if err != nil || len(msgs) == 0 {
 			break 
 		}
 
 		totalCount += len(msgs)
+		// آخری میسج کی آئی ڈی سیٹ کریں تاکہ اگلی بار اس سے پیچھے والے فیچ ہوں
+		lastMsgID = msgs[len(msgs)-1].MessageServerID
 
-		// ⚡ Anti-Ban Sleep (واٹس ایپ کو شک نہ ہو اس لیے 1 سیکنڈ کا وقفہ)
-		time.Sleep(1 * time.Second)
+		time.Sleep(500 * time.Millisecond) // تھوڑا کم ڈیلے تاکہ کام جلدی ہو
+		
+		// اگر میسج بہت زیادہ ہوں تو یوزر کو اپڈیٹ دیتے رہیں
+		if totalCount % 500 == 0 {
+			fmt.Printf("Fetched %d messages so far...\n", totalCount)
+		}
 	}
 
-	// 5. فائنل رزلٹ کا میسج
-	successMsg := fmt.Sprintf("✅ *TEST SUCCESSFUL!*\n\n📊 *Target:* %s\n📦 *Total Messages Found:* %d\n\nیار مجھے اس چینل کے ٹوٹل *%d* میسجز کی سرور آئی ڈیز مل گئی ہیں! 🚀\n\nاب بتاؤ، کیا ان سب پر ڈیلیٹ والا ہتھوڑا چلا دوں؟", targetJID.User, totalCount, totalCount)
+	successMsg := fmt.Sprintf("✅ *SCAN COMPLETE!*\n\n📦 *Total Messages Found:* %d\n\nیار کام تیار ہے، اب بتاؤ صفایا شروع کروں؟", totalCount)
 	replyMessage(client, v, successMsg)
 }
