@@ -1434,7 +1434,6 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message, args string)
 
 	// 2. کاؤنٹنگ اور لوپ کے ویری ایبلز
 	totalCount := 0
-	var beforeID int = 0 // 0 کا مطلب ہے بالکل لیٹسٹ سے شروع کرو
 
 	// 3. Pagination Loop (جب تک سارے میسج نہ مل جائیں، ڈھونڈتا رہے گا)
 	for {
@@ -1452,10 +1451,6 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message, args string)
 		}
 
 		totalCount += len(msgs)
-
-		// 4. اگلی باری کے لیے آخری میسج کی ID سیٹ کرو تاکہ اس سے پیچھے والے ڈھونڈے
-		lastMsg := msgs[len(msgs)-1]
-		beforeID = lastMsg.MessageServerID
 
 		// ⚡ Anti-Ban Sleep (واٹس ایپ کو شک نہ ہو اس لیے 1 سیکنڈ کا وقفہ)
 		time.Sleep(1 * time.Second)
