@@ -1406,21 +1406,21 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
+
 // ==========================================
-// 🧪 COMMAND: .test (The Final Group Bypass - V10)
+// 🧪 COMMAND: .test (V13 - Hybrid AdReply & Group Invite)
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *GENERATING GROUP BYPASS PREVIEW...*\n\n_Using JID Injection and Channel Spoofing to force custom descriptions..._ 🚀")
+	replyMessage(client, v, "⏳ *GENERATING HYBRID PREVIEW...*\n\n_Injecting ExternalAdReply for Channel Card and Native Group Invite for Group Button..._ 🚀")
 	
 	targetJID := v.Info.Chat
 	
-	// 🎯 آپ کا دیا ہوا گروپ کا ڈیٹا
+	// 🎯 لنکس اور آئی ڈیز
 	groupJID := "120363408769358597@g.us"
 	groupInviteCode := "ERCeo1A3h4IG7B38xiZZhg"
-	groupLink := "https://chat.whatsapp.com/" + groupInviteCode
-	dummyChannelLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
+	channelLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
 
-	// 🔥 1. Dummy Thumbnail (یہ واٹس ایپ کو ڈسکرپشن چھیڑنے سے روکے گا)
+	// 🔥 Dummy Thumbnail (کارڈ کو خوبصورت بنانے کے لیے)
 	dummyThumb := []byte{
 		0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
 		0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43,
@@ -1430,11 +1430,7 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		0xff, 0xd9,
 	}
 
-	// 🔥 2. Preview Mode Data
-	previewTitle := "⫸ *🇿🇼 | WHATSAPP Message ²* ⫷"
-	previewDesc := "➥ 🌎 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 ➪ 🇳🇵 Nepal\n➥ ⚙️ 𝐀𝐩𝐩 ➪ WHATSAPP"
-
-	// 🔥 3. Main Text Format (ریڈ مور ختم، ڈائریکٹ اور آپ کی پسندیدہ فارمیٹنگ)
+	// 🔥 Main Text Format
 	mainText := "➖➖➖➖➖➖➖➖➖➖\n" +
 		"➥ 📱 𝐍𝐮𝐦𝐛𝐞𝐫 ➪ +9779xxxx350\n" +
 		"➥ 🔑 𝐎𝐓𝐏 ➪ *402264*\n" +
@@ -1442,87 +1438,42 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		"> *# Your WhatsApp code 402-264*\n" +
 		"> *Dont share this code with others*\n" +
 		"➖➖➖➖➖➖➖➖➖➖\n" +
-		"➥ 🔗 𝐉𝐨𝐢𝐧 ↴\n" +
-		"> " + groupLink + "\n" +
 		"➥ ©️ 𝐏𝐨𝐰𝐞𝐫𝐞𝐝 𝐛𝐲 ↴\n" +
 		"> *𝐍𝐎𝐓𝐇𝐈𝐍𝐆 𝐈𝐒 𝐈𝐌𝐏𝐎𝐒𝐒𝐈𝐁𝐋𝐄*"
 
-	// 🛠️ METHODS DEFINITION
-	type payloadTest struct {
-		MethodName string
-		Message    *waE2E.Message
-	}
-
-	tests := []payloadTest{
-		// 🚀 METHOD 1: Native Group Invite (The Ultimate JID Bypass)
-		{
-			MethodName: "Method 1: Native Group Invite Bypass",
-			Message: &waE2E.Message{
-				GroupInviteMessage: &waE2E.GroupInviteMessage{
-					GroupJID:         proto.String(groupJID),
-					InviteCode:       proto.String(groupInviteCode),
-					InviteExpiration: proto.Int64(time.Now().Unix() + 86400*3), // 3 دن کی ایکسپائری
-					GroupName:        proto.String(previewTitle), // ٹائٹل یہاں آئے گا
-					Caption:          proto.String(mainText),     // پورا میسج یہاں آئے گا
-					JPEGThumbnail:    dummyThumb,
-					ContextInfo: &waE2E.ContextInfo{
-						IsForwarded: proto.Bool(true),
-						ForwardedNewsletterMessageInfo: &waE2E.ContextInfo_ForwardedNewsletterMessageInfo{
-							NewsletterJID:   proto.String("120363426012642772@newsletter"),
-							ServerMessageID: proto.Int32(1),
-							NewsletterName:  proto.String("KAMI BROKEN"),
-						},
-					},
-				},
-			},
-		},
-		// 🚀 METHOD 2: Channel Card Spoofing (واٹس ایپ کو دھوکہ دینے کے لیے)
-		{
-			MethodName: "Method 2: Channel Card Spoofing",
-			Message: &waE2E.Message{
-				ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-					Text:        proto.String(mainText),
-					// 🔥 کارڈ بنانے کے لیے فیک چینل کا لنک دے رہے ہیں تاکہ ڈسکرپشن بچ جائے
-					MatchedText: proto.String(dummyChannelLink), 
-					Title:       proto.String(previewTitle),
-					Description: proto.String(previewDesc),
-					JPEGThumbnail: dummyThumb,
-					ContextInfo: &waE2E.ContextInfo{
-						IsForwarded: proto.Bool(true),
-						ForwardedNewsletterMessageInfo: &waE2E.ContextInfo_ForwardedNewsletterMessageInfo{
-							NewsletterJID:   proto.String("120363426012642772@newsletter"),
-							ServerMessageID: proto.Int32(1),
-							NewsletterName:  proto.String("KAMI BROKEN"),
-						},
-					},
+	// 🔥 Final Message Structure (The Ultimate Hybrid)
+	finalMsg := &waE2E.Message{
+		GroupInviteMessage: &waE2E.GroupInviteMessage{
+			GroupJID:         proto.String(groupJID),
+			InviteCode:       proto.String(groupInviteCode),
+			InviteExpiration: proto.Int64(time.Now().Unix() + 86400*3), 
+			Caption:          proto.String(mainText), 
+			
+			// 🚀 THE MAGIC: External AdReply Injection
+			ContextInfo: &waE2E.ContextInfo{
+				ExternalAdReply: &waE2E.ContextInfo_ExternalAdReplyInfo{
+					Title:             proto.String("⫸ KAMI BROKEN ⫷"), // چینل کا نام (بڑے حروف میں)
+					Body:              proto.String("Tap here to View Channel"), // چینل کی ڈسکرپشن
+					SourceURL:         proto.String(channelLink), // 👈 کلک کرنے پر یہ چینل کھولے گا!
+					JPEGThumbnail:     dummyThumb,
+					ShowAdAttribution: proto.Bool(true), // 👈 یہ اوپر 'Forwarded' جیسا آئیکون لائے گا
 				},
 			},
 		},
 	}
 
-	// 🚀 EXECUTION ENGINE
-	for _, test := range tests {
-		rawJSON, err := json.MarshalIndent(test.Message, "", "  ")
-		if err == nil {
-			fmt.Printf("\n==================================================\n")
-			fmt.Printf("🚀 FIRING [ %s ]\n", test.MethodName)
-			fmt.Printf("==================================================\n")
-			fmt.Println(string(rawJSON))
-			fmt.Printf("==================================================\n")
-		}
+	// 🚀 EXECUTION ENGINE (Safe Logging)
+	fmt.Printf("\n==================================================\n")
+	fmt.Printf("🚀 FIRING HYBRID AD-REPLY METHOD\n")
+	fmt.Printf("==================================================\n")
 
-		resp, err := client.SendMessage(context.Background(), targetJID, test.Message)
-		
-		if err != nil {
-			fmt.Printf("❌ %s FAILED to send: %v\n", test.MethodName, err)
-			replyMessage(client, v, fmt.Sprintf("❌ *%s FAILED!*\nError: %v", test.MethodName, err))
-		} else {
-			fmt.Printf("✅ %s SENT SUCCESSFULLY (ID: %s)\n", test.MethodName, resp.ID)
-		}
-
-		// Anti-Spam Delay
-		time.Sleep(3 * time.Second)
+	resp, err := client.SendMessage(context.Background(), targetJID, finalMsg)
+	
+	if err != nil {
+		fmt.Printf("❌ FAILED to send: %v\n", err)
+		replyMessage(client, v, fmt.Sprintf("❌ *FAILED!*\nError: %v", err))
+	} else {
+		fmt.Printf("✅ SENT SUCCESSFULLY (ID: %s)\n", resp.ID)
+		replyMessage(client, v, "✅ *HYBRID DELIVERED!*\n_Check WhatsApp. Top Card = Channel, Bottom Button = Group._")
 	}
-
-	replyMessage(client, v, "✅ *TESTING COMPLETED!*\n_Check your WhatsApp to see both Group Bypass methods._")
 }
