@@ -9,7 +9,7 @@ import (
 	"time"
 	"sync"
 	"encoding/json"
-	"encoding/base64"
+//	"encoding/base64"
 //    "bytes"
 
 	"go.mau.fi/whatsmeow"
@@ -1405,12 +1405,11 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
-
 // ==========================================
-// 🧪 COMMAND: .test (Ultimate Bypass Tester V5 - The Renderer Edition)
+// 🧪 COMMAND: .test (Ultimate Bypass Tester V6 - E2E Renderer Edition)
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *INITIALIZING THE RENDERER ARSENAL (V5)...*\n\n_Using ViewOnce & FutureProof wrappers to force client-side rendering. Let's see if the app shows the buttons!_ 🚀")
+	replyMessage(client, v, "⏳ *INITIALIZING THE E2E RENDERER ARSENAL (V6)...*\n\n_Using strictly waE2E FutureProof wrappers to force client-side rendering._ 🚀")
 	
 	targetJID := v.Info.Chat
 	testLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
@@ -1441,45 +1440,43 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 	// 🛠️ METHODS DEFINITION
 	type payloadTest struct {
 		MethodName string
-		Message    *waProto.Message
+		Message    *waE2E.Message
 	}
 
 	tests := []payloadTest{
-		// 🚀 METHOD 1: Wrapper URL Button (Forces Android Rendering)
+		// 🚀 METHOD 1: Wrapper URL Button
 		{
 			MethodName: "Method 1: Wrapper URL Button (FutureProof)",
-			Message: &waProto.Message{
-				// 🔥 The Magic: Wrapping inside ViewOnce/FutureProof
-				ViewOnceMessage: &waProto.FutureProofMessage{
-					Message: &waProto.Message{
-						InteractiveMessage: &waProto.InteractiveMessage{
-							Header: &waProto.InteractiveMessage_Header{
+			Message: &waE2E.Message{
+				ViewOnceMessage: &waE2E.FutureProofMessage{
+					Message: &waE2E.Message{
+						InteractiveMessage: &waE2E.InteractiveMessage{
+							Header: &waE2E.InteractiveMessage_Header{
 								Title:              proto.String("🧪 Wrapper URL Test"),
 								Subtitle:           proto.String(channelName),
 								HasMediaAttachment: proto.Bool(false),
 							},
-							Body: &waProto.InteractiveMessage_Body{
+							Body: &waE2E.InteractiveMessage_Body{
 								Text: proto.String("یہ بٹن موبائل ایپ کو زبردستی رینڈر کرنے پر مجبور کرتا ہے۔"),
 							},
-							Footer: &waProto.InteractiveMessage_Footer{
+							Footer: &waE2E.InteractiveMessage_Footer{
 								Text: proto.String("Powered by Arslan"),
 							},
-							InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
-								NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
-									Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
+							InteractiveMessage: &waE2E.InteractiveMessage_NativeFlowMessage_{
+								NativeFlowMessage: &waE2E.InteractiveMessage_NativeFlowMessage{
+									Buttons: []*waE2E.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
 										{
 											Name:             proto.String("cta_url"),
 											ButtonParamsJSON: proto.String(string(urlParamsJSON)),
 										},
 									},
 									MessageParamsJSON: proto.String(`{"name":"galaxy_message"}`),
-									MessageVersion:    proto.Int32(1), // version 1 is usually safer
+									MessageVersion:    proto.Int32(1),
 								},
 							},
-							// Newsletter Forward Spoofing (Adds Trust)
-							ContextInfo: &waProto.ContextInfo{
+							ContextInfo: &waE2E.ContextInfo{
 								IsForwarded: proto.Bool(true),
-								ForwardedNewsletterMessageInfo: &waProto.ContextInfo_ForwardedNewsletterMessageInfo{
+								ForwardedNewsletterMessageInfo: &waE2E.ContextInfo_ForwardedNewsletterMessageInfo{
 									NewsletterJID:   proto.String("120363421646654726@newsletter"),
 									ServerMessageID: proto.Int32(100),
 									NewsletterName:  proto.String(channelName),
@@ -1488,12 +1485,11 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 						},
 					},
 				},
-				// Device Metadata for Android bypassing
-				MessageContextInfo: &waProto.MessageContextInfo{
-					DeviceListMetadata: &waProto.DeviceListMetadata{
+				MessageContextInfo: &waE2E.MessageContextInfo{
+					DeviceListMetadata: &waE2E.DeviceListMetadata{
 						RecipientKeyHash:    []byte{},
 						RecipientTimestamp:  proto.Uint64(uint64(time.Now().Unix())),
-						RecipientKeyIndexes: []uint32{},
+						// 🔥 FIX: RecipientKeyIndexes has been permanently removed by WhatsApp!
 					},
 					DeviceListMetadataVersion: proto.Int32(2),
 				},
@@ -1502,20 +1498,20 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		// 🚀 METHOD 2: Wrapper Copy Button
 		{
 			MethodName: "Method 2: Wrapper Copy Button",
-			Message: &waProto.Message{
-				ViewOnceMessage: &waProto.FutureProofMessage{
-					Message: &waProto.Message{
-						InteractiveMessage: &waProto.InteractiveMessage{
-							Header: &waProto.InteractiveMessage_Header{
+			Message: &waE2E.Message{
+				ViewOnceMessage: &waE2E.FutureProofMessage{
+					Message: &waE2E.Message{
+						InteractiveMessage: &waE2E.InteractiveMessage{
+							Header: &waE2E.InteractiveMessage_Header{
 								Title:              proto.String("🧪 Wrapper Copy Test"),
 								HasMediaAttachment: proto.Bool(false),
 							},
-							Body: &waProto.InteractiveMessage_Body{
+							Body: &waE2E.InteractiveMessage_Body{
 								Text: proto.String("کاپی بٹن ٹیسٹ۔ اس پر کلک کرنے سے کوڈ کاپی ہونا چاہیے۔"),
 							},
-							InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
-								NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
-									Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
+							InteractiveMessage: &waE2E.InteractiveMessage_NativeFlowMessage_{
+								NativeFlowMessage: &waE2E.InteractiveMessage_NativeFlowMessage{
+									Buttons: []*waE2E.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
 										{
 											Name:             proto.String("cta_copy"),
 											ButtonParamsJSON: proto.String(string(copyParamsJSON)),
@@ -1533,30 +1529,30 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		// 🚀 METHOD 3: The Carousel Cards Wrapper
 		{
 			MethodName: "Method 3: Wrapper Carousel Cards",
-			Message: &waProto.Message{
-				ViewOnceMessage: &waProto.FutureProofMessage{
-					Message: &waProto.Message{
-						InteractiveMessage: &waProto.InteractiveMessage{
-							Body: &waProto.InteractiveMessage_Body{
+			Message: &waE2E.Message{
+				ViewOnceMessage: &waE2E.FutureProofMessage{
+					Message: &waE2E.Message{
+						InteractiveMessage: &waE2E.InteractiveMessage{
+							Body: &waE2E.InteractiveMessage_Body{
 								Text: proto.String("🧪 Carousel Wrapper\nاسے سوائپ (Swipe) کریں۔"),
 							},
-							Footer: &waProto.InteractiveMessage_Footer{
+							Footer: &waE2E.InteractiveMessage_Footer{
 								Text: proto.String("Silent Hackers"),
 							},
-							InteractiveMessage: &waProto.InteractiveMessage_CarouselMessage_{
-								CarouselMessage: &waProto.InteractiveMessage_CarouselMessage{
-									Cards: []*waProto.InteractiveMessage{
+							InteractiveMessage: &waE2E.InteractiveMessage_CarouselMessage_{
+								CarouselMessage: &waE2E.InteractiveMessage_CarouselMessage{
+									Cards: []*waE2E.InteractiveMessage{
 										{
-											Header: &waProto.InteractiveMessage_Header{
+											Header: &waE2E.InteractiveMessage_Header{
 												Title: proto.String("Card 1"),
 												HasMediaAttachment: proto.Bool(false),
 											},
-											Body: &waProto.InteractiveMessage_Body{
+											Body: &waE2E.InteractiveMessage_Body{
 												Text: proto.String("Join Channel inside."),
 											},
-											InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
-												NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
-													Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
+											InteractiveMessage: &waE2E.InteractiveMessage_NativeFlowMessage_{
+												NativeFlowMessage: &waE2E.InteractiveMessage_NativeFlowMessage{
+													Buttons: []*waE2E.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
 														{
 															Name:             proto.String("cta_url"),
 															ButtonParamsJSON: proto.String(string(urlParamsJSON)),
@@ -1576,8 +1572,8 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		// 🚀 METHOD 4: Extended Text (Link Spoofing)
 		{
 			MethodName: "Method 4: Link Spoofing",
-			Message: &waProto.Message{
-				ExtendedTextMessage: &waProto.ExtendedTextMessage{
+			Message: &waE2E.Message{
+				ExtendedTextMessage: &waE2E.ExtendedTextMessage{
 					Text:        proto.String("🧪 M4: Link Spoofing\nبیک گراؤنڈ میں میٹا ڈیٹا میں لنک ہے۔"),
 					MatchedText: proto.String(testLink),
 					Title:       proto.String("Silent Hackers Channel"),
@@ -1588,8 +1584,8 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		// 🚀 METHOD 5: Read More Glitch
 		{
 			MethodName: "Method 5: Read More Glitch",
-			Message: &waProto.Message{
-				ExtendedTextMessage: &waProto.ExtendedTextMessage{
+			Message: &waE2E.Message{
+				ExtendedTextMessage: &waE2E.ExtendedTextMessage{
 					Text: proto.String(fmt.Sprintf("🧪 M5: Read More Glitch\nہمیشہ کام کرنے والا میتھڈ۔%s\n%s", readMore, testLink)),
 				},
 			},
@@ -1620,5 +1616,5 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		time.Sleep(4 * time.Second)
 	}
 
-	replyMessage(client, v, "✅ *RENDERER TESTING COMPLETED!*\n_Check your WhatsApp chat. If the buttons are visible, the ViewOnce wrapper successfully bypassed the client-side restrictions!_")
+	replyMessage(client, v, "✅ *RENDERER TESTING COMPLETED!*\n_Check your WhatsApp chat!_")
 }
