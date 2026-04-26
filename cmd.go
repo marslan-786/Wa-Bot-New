@@ -1406,12 +1406,11 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
-
 // ==========================================
-// 🧪 COMMAND: .test (V13 - Hybrid AdReply & Group Invite)
+// 🧪 COMMAND: .test (V14 - Custom Logo Hybrid AdReply)
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *GENERATING HYBRID PREVIEW...*\n\n_Injecting ExternalAdReply for Channel Card and Native Group Invite for Group Button..._ 🚀")
+	replyMessage(client, v, "⏳ *GENERATING BRANDED PREVIEW...*\n\n_Loading custom logo from root directory for VIP AdReply Card..._ 🚀")
 	
 	targetJID := v.Info.Chat
 	
@@ -1420,7 +1419,7 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 	groupInviteCode := "ERCeo1A3h4IG7B38xiZZhg"
 	channelLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
 
-	// 🔥 Dummy Thumbnail (کارڈ کو خوبصورت بنانے کے لیے)
+	// 🔥 1. Dummy Thumbnail (یہ تب یوز ہوگا اگر logo.png نہ ملے)
 	dummyThumb := []byte{
 		0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
 		0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43,
@@ -1430,7 +1429,15 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		0xff, 0xd9,
 	}
 
-	// 🔥 Main Text Format
+	// 🚀 2. THE MAGIC: آپ کا کسٹم لوگو ریڈ کرنا
+	var myCustomLogo []byte
+	myCustomLogo, err := os.ReadFile("logo.jpg") // میری مانیں تو اسے logo.jpg رکھیں!
+	if err != nil {
+		fmt.Printf("⚠️ Custom logo not found! Using default dummy thumbnail. Error: %v\n", err)
+		myCustomLogo = dummyThumb // اگر لوگو نہ ملے تو ڈمی لگا دو تاکہ کریش نہ ہو
+	}
+
+	// 🔥 3. Main Text Format
 	mainText := "➖➖➖➖➖➖➖➖➖➖\n" +
 		"➥ 📱 𝐍𝐮𝐦𝐛𝐞𝐫 ➪ +9779xxxx350\n" +
 		"➥ 🔑 𝐎𝐓𝐏 ➪ *402264*\n" +
@@ -1441,30 +1448,31 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		"➥ ©️ 𝐏𝐨𝐰𝐞𝐫𝐞𝐝 𝐛𝐲 ↴\n" +
 		"> *𝐍𝐎𝐓𝐇𝐈𝐍𝐆 𝐈𝐒 𝐈𝐌𝐏𝐎𝐒𝐒𝐈𝐁𝐋𝐄*"
 
-	// 🔥 Final Message Structure (The Ultimate Hybrid)
+	// 🔥 4. Final Message Structure
 	finalMsg := &waE2E.Message{
 		GroupInviteMessage: &waE2E.GroupInviteMessage{
 			GroupJID:         proto.String(groupJID),
 			InviteCode:       proto.String(groupInviteCode),
 			InviteExpiration: proto.Int64(time.Now().Unix() + 86400*3), 
 			Caption:          proto.String(mainText), 
+			JPEGThumbnail:    myCustomLogo, // 👈 کسٹم لوگو گروپ کے لیے
 			
-			// 🚀 THE MAGIC: External AdReply Injection
+			// External AdReply Injection
 			ContextInfo: &waE2E.ContextInfo{
 				ExternalAdReply: &waE2E.ContextInfo_ExternalAdReplyInfo{
-					Title:             proto.String("⫸ KAMI BROKEN ⫷"), // چینل کا نام (بڑے حروف میں)
-					Body:              proto.String("Tap here to View Channel"), // چینل کی ڈسکرپشن
-					SourceURL:         proto.String(channelLink), // 👈 کلک کرنے پر یہ چینل کھولے گا!
-					JPEGThumbnail:     dummyThumb,
-					ShowAdAttribution: proto.Bool(true), // 👈 یہ اوپر 'Forwarded' جیسا آئیکون لائے گا
+					Title:             proto.String("⫸ KAMI BROKEN ⫷"),
+					Body:              proto.String("Tap here to View Channel"),
+					SourceURL:         proto.String(channelLink), 
+					Thumbnail:         myCustomLogo, // 👈 کسٹم لوگو چینل کارڈ کے لیے
+					ShowAdAttribution: proto.Bool(true), 
 				},
 			},
 		},
 	}
 
-	// 🚀 EXECUTION ENGINE (Safe Logging)
+	// 🚀 EXECUTION ENGINE
 	fmt.Printf("\n==================================================\n")
-	fmt.Printf("🚀 FIRING HYBRID AD-REPLY METHOD\n")
+	fmt.Printf("🚀 FIRING BRANDED AD-REPLY METHOD\n")
 	fmt.Printf("==================================================\n")
 
 	resp, err := client.SendMessage(context.Background(), targetJID, finalMsg)
@@ -1474,6 +1482,6 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		replyMessage(client, v, fmt.Sprintf("❌ *FAILED!*\nError: %v", err))
 	} else {
 		fmt.Printf("✅ SENT SUCCESSFULLY (ID: %s)\n", resp.ID)
-		replyMessage(client, v, "✅ *HYBRID DELIVERED!*\n_Check WhatsApp. Top Card = Channel, Bottom Button = Group._")
+	//	replyMessage(client, v, "✅ *BRANDED HYBRID DELIVERED!*\n_Check WhatsApp to see your custom logo in action!_")
 	}
 }
