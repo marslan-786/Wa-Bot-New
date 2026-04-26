@@ -11,9 +11,9 @@ import (
 	"encoding/json"
 //	"encoding/base64"
     "bytes"
-    "image"
-	"image/jpeg"
-	_ "image/png"
+ //   "image"
+//	"image/jpeg"
+//	_ "image/png"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
@@ -459,11 +459,11 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		react(client, v.Info.Chat, v.Info.ID, "⏳")
 		go handleNumberChecker(client, v)
 		
-			// 🧪 TESTING ZONE
+	// 🧪 TESTING ZONE
 	case "test":
 		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 		react(client, v.Info.Chat, v.Info.ID, "🧪")
-		go handleButtonTests(client, v)
+		go handleButtonTests(client, v, fullArgs) // 👈 یہاں fullArgs ایڈ کر دیا ہے
 		
 		
 	case "id":
@@ -1409,115 +1409,59 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
-
 // ==========================================
-// 🛠️ HELPER: Auto Image Compressor for WhatsApp Thumbnails
+// 🧪 COMMAND: .test (Fetch & Count Channel Messages)
 // ==========================================
-func getCompressedLogo(filePath string) []byte {
-	// 1. واٹس ایپ کا ڈیفالٹ ڈمی تھمب نیل (Fallback)
-	dummyThumb := []byte{
-		0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
-		0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43,
-		0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-		0xff, 0xd9,
+func handleButtonTests(client *whatsmeow.Client, v *events.Message, args string) {
+	if args == "" {
+		replyMessage(client, v, "❌ *Error:* یار چینل کی آئی ڈی تو دو!\nمثال: `.test 123456789@newsletter` یا صرف `.test 123456789`")
+		return
 	}
 
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		fmt.Println("⚠️ Logo file not found, using dummy.")
-		return dummyThumb
+	replyMessage(client, v, "⏳ *Scanning Channel...*\nیار میں چینل کے سرور سے ہسٹری فیچ کر رہا ہوں، تھوڑا ویٹ کرو...")
+
+	// 1. چینل کی JID (ID) بنانا
+	cleanID := strings.TrimSpace(args)
+	if !strings.Contains(cleanID, "@newsletter") {
+		cleanID = cleanID + "@newsletter"
 	}
-
-	// 2. اگر سائز پہلے ہی 50KB سے کم ہے، تو ڈائریکٹ بھیج دو
-	if len(data) < 50000 {
-		return data
-	}
-
-	// 3. اگر سائز بڑا ہے تو Go کا اپنا JPEG کمپریسر یوز کرو
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		fmt.Println("⚠️ Failed to decode logo, using dummy.")
-		return dummyThumb
-	}
-
-	buf := new(bytes.Buffer)
-	// Quality 30 کا مطلب ہے کہ یہ سائز کو بہت کم کر دے گا لیکن دیکھنے میں ٹھیک لگے گا
-	err = jpeg.Encode(buf, img, &jpeg.Options{Quality: 30}) 
-	if err != nil {
-		return dummyThumb
-	}
-
-	fmt.Printf("✅ Logo compressed from %d bytes to %d bytes\n", len(data), buf.Len())
-	return buf.Bytes()
-}
-
-// ==========================================
-// 🧪 COMMAND: .test (V15 - Dual Link Hybrid with Auto-Compress)
-// ==========================================
-func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *GENERATING DUAL-LINK PREVIEW...*\n\n_Auto-compressing logo and injecting Channel Card + Group Link..._ 🚀")
 	
-	targetJID := v.Info.Chat
-	
-	// 🎯 لنکس
-	groupInviteCode := "ERCeo1A3h4IG7B38xiZZhg"
-	groupLink := "https://chat.whatsapp.com/" + groupInviteCode
-	channelLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
-
-	// 🎨 آٹو کمپریسڈ لوگو حاصل کریں
-	myLogo := getCompressedLogo("logo.png") // یا logo.jpg جو بھی آپ کی فائل کا نام ہے
-
-	// 🔥 ریڈ مور فورسر
-	readMore := strings.Repeat("\u200E\u200F", 2500)
-
-	// 🔥 Main Text Format
-	mainText := "➖➖➖➖➖➖➖➖➖➖\n" +
-		"➥ 📱 𝐍𝐮𝐦𝐛𝐞𝐫 ➪ +9779xxxx350\n" +
-		"➥ 🔑 𝐎𝐓𝐏 ➪ *402264*\n" +
-		"➥ 📩 𝐌𝐞𝐬𝐬𝐚𝐠𝐞 ➪\n" +
-		"> *# Your WhatsApp code 402-264*\n" +
-		"> *Dont share this code with others*\n" +
-		"➖➖➖➖➖➖➖➖➖➖"
-
-	// 🔥 Hidden Text (گروپ کا لنک ریڈ مور کے اندر)
-	hiddenText := "➥ 🔗 𝐉𝐨𝐢𝐧 𝐆𝐫𝐨𝐮𝐩 ↴\n" +
-		"> " + groupLink + "\n" +
-		"➥ ©️ 𝐏𝐨𝐰𝐞𝐫𝐞𝐝 𝐛𝐲 ↴\n" +
-		"> *𝐍𝐎𝐓𝐇𝐈𝐍𝐆 𝐈𝐒 𝐈𝐌𝐏𝐎𝐒𝐒𝐈𝐁𝐋𝐄*"
-
-	fullText := mainText + readMore + "\n" + hiddenText
-
-	// 🔥 Final Message Structure (Extended Text + AdReply)
-	finalMsg := &waE2E.Message{
-		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String(fullText),
-			
-			// 🚀 THE MAGIC: External AdReply for CHANNEL
-			ContextInfo: &waE2E.ContextInfo{
-				ExternalAdReply: &waE2E.ContextInfo_ExternalAdReplyInfo{
-					Title:             proto.String("⫸ KAMI BROKEN ⫷"), // یہ ٹائٹل اب اوور رائڈ نہیں ہوگا!
-					Body:              proto.String("Tap here to Join Channel"),
-					SourceURL:         proto.String(channelLink), // اس کارڈ پر کلک سے چینل کھلے گا
-					Thumbnail:         myLogo, // کمپریسڈ لوگو
-					ShowAdAttribution: proto.Bool(true), // Forwarded/Ad آئیکون کے لیے
-					MediaType:         waE2E.ContextInfo_ExternalAdReplyInfo_IMAGE.Enum(), // Image Media Type
-				},
-			},
-		},
+	targetJID, err := types.ParseJID(cleanID)
+	if err != nil || targetJID.Server != types.NewsletterServer {
+		replyMessage(client, v, "❌ *Invalid ID:* چینل کی آئی ڈی غلط لگ رہی ہے۔")
+		return
 	}
 
-	// 🚀 EXECUTION ENGINE
-	fmt.Printf("\n==================================================\n")
-	fmt.Printf("🚀 FIRING V15 HYBRID METHOD\n")
-	fmt.Printf("==================================================\n")
+	// 2. کاؤنٹنگ اور لوپ کے ویری ایبلز
+	totalCount := 0
+	var beforeID types.NewsletterMessageServerID = 0 // 0 کا مطلب ہے بالکل لیٹسٹ سے شروع کرو
 
-	resp, err := client.SendMessage(context.Background(), targetJID, finalMsg)
-	
-	if err != nil {
-		fmt.Printf("❌ FAILED to send: %v\n", err)
-		replyMessage(client, v, fmt.Sprintf("❌ *FAILED!*\nError: %v", err))
-	} else {
-		fmt.Printf("✅ SENT SUCCESSFULLY (ID: %s)\n", resp.ID)
-		replyMessage(client, v, "✅ *HYBRID DELIVERED!*\n_Top Card = Channel, Bottom Link (in Read More) = Group!_")
+	// 3. Pagination Loop (جب تک سارے میسج نہ مل جائیں، ڈھونڈتا رہے گا)
+	for {
+		// whatsmeow کا آفیشل نیوز لیٹر فیچ فنکشن (ایک بار میں 100 میسج)
+		msgs, err := client.GetNewsletterMessages(targetJID, 100, beforeID)
+		
+		if err != nil {
+			replyMessage(client, v, fmt.Sprintf("❌ ہسٹری نکالنے میں مسئلہ آیا: %v\nکیا بوٹ اس چینل میں ایڈمن ہے؟", err))
+			return
+		}
+
+		// اگر کوئی نیا میسج نہیں ملا، تو لوپ توڑ دو
+		if len(msgs) == 0 {
+			break 
+		}
+
+		totalCount += len(msgs)
+
+		// 4. اگلی باری کے لیے آخری میسج کی ID سیٹ کرو تاکہ اس سے پیچھے والے ڈھونڈے
+		lastMsg := msgs[len(msgs)-1]
+		beforeID = lastMsg.MessageServerID
+
+		// ⚡ Anti-Ban Sleep (واٹس ایپ کو شک نہ ہو اس لیے 1 سیکنڈ کا وقفہ)
+		time.Sleep(1 * time.Second)
 	}
+
+	// 5. فائنل رزلٹ کا میسج
+	successMsg := fmt.Sprintf("✅ *TEST SUCCESSFUL!*\n\n📊 *Target:* %s\n📦 *Total Messages Found:* %d\n\nیار مجھے اس چینل کے ٹوٹل *%d* میسجز کی سرور آئی ڈیز مل گئی ہیں! 🚀\n\nاب بتاؤ، کیا ان سب پر ڈیلیٹ والا ہتھوڑا چلا دوں؟", targetJID.User, totalCount, totalCount)
+	replyMessage(client, v, successMsg)
 }
