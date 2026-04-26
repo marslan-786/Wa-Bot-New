@@ -10,7 +10,7 @@ import (
 	"sync"
 	"encoding/json"
 //	"encoding/base64"
-    "bytes"
+ //   "bytes"
  //   "image"
 //	"image/jpeg"
 //	_ "image/png"
@@ -24,7 +24,7 @@ import (
 	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/proto/waCommon"
 //	"google.golang.org/protobuf/encoding/protojson"
-    waE2E "go.mau.fi/whatsmeow/proto/waE2E"
+ //   waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 )
 
 // ==========================================
@@ -1434,12 +1434,12 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message, args string)
 
 	// 2. کاؤنٹنگ اور لوپ کے ویری ایبلز
 	totalCount := 0
-	var beforeID types.NewsletterMessageServerID = 0 // 0 کا مطلب ہے بالکل لیٹسٹ سے شروع کرو
+	var beforeID int = 0 // 0 کا مطلب ہے بالکل لیٹسٹ سے شروع کرو
 
 	// 3. Pagination Loop (جب تک سارے میسج نہ مل جائیں، ڈھونڈتا رہے گا)
 	for {
 		// whatsmeow کا آفیشل نیوز لیٹر فیچ فنکشن (ایک بار میں 100 میسج)
-		msgs, err := client.GetNewsletterMessages(targetJID, 100, beforeID)
+		msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{Count: 100})
 		
 		if err != nil {
 			replyMessage(client, v, fmt.Sprintf("❌ ہسٹری نکالنے میں مسئلہ آیا: %v\nکیا بوٹ اس چینل میں ایڈمن ہے؟", err))
