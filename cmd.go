@@ -1405,57 +1405,49 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
+
 // ==========================================
-// 🧪 COMMAND: .test (The Ultimate Final V7 - VIP Preview & Forward)
+// 🧪 COMMAND: .test (The Ultimate Final V8 - Pure VIP Preview)
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *FINALIZING THE MASTERPIECE (V7)...*\n\n_Generating forced Read-More, Channel Forwarding, and VIP Preview Cards..._ 🚀")
+	replyMessage(client, v, "⏳ *GENERATING VIP PREVIEW...*\n\n_Read-More removed. Forcing pure Link Preview Mode with KAMI BROKEN forward tag..._ 🚀")
 	
 	targetJID := v.Info.Chat
 	testLink := "https://chat.whatsapp.com/ERCeo1A3h4IG7B38xiZZhg"
 	
-	// 🔥 1. Read More Forcer (Massive Zero-Width Injection)
-	// 2500 بار لوپ چلنے سے یہ 5000 کریکٹرز بنائے گا، جس سے واٹس ایپ 100% ریڈ مور بنائے گا
-	readMore := strings.Repeat("\u200E\u200F", 2500)
-
-	// 🔥 2. Preview Mode Data (جو کارڈ کے اوپر نظر آئے گا)
-	previewTitle := "⫸ *🇿🇼 | WHATSAPP Message ²* ⫷" // ایموجی کے بجائے ڈیزائننگ تیر
+	// 🔥 1. Preview Mode Data (جو کارڈ کے اندر بڑا سا نظر آئے گا)
+	previewTitle := "⫸ *🇿🇼 | WHATSAPP Message ²* ⫷"
 	previewDesc := "➥ 🌎 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 ➪ 🇳🇵 Nepal\n➥ ⚙️ 𝐀𝐩𝐩 ➪ WHATSAPP"
 
-	// 🔥 3. Main Visible Text (جو ریڈ مور سے پہلے نظر آئے گا)
-	visibleText := "➖➖➖➖➖➖➖➖➖➖\n" +
+	// 🔥 2. Main Visible Text (جو کارڈ کے نیچے یا اوپر ٹیکسٹ کی صورت میں ہوگا)
+	mainText := "➖➖➖➖➖➖➖➖➖➖\n" +
 		"➥ 📱 𝐍𝐮𝐦𝐛𝐞𝐫 ➪ +9779xxxx350\n" +
 		"➥ 🔑 𝐎𝐓𝐏 ➪ *402264*\n" +
 		"➥ 📩 𝐌𝐞𝐬𝐬𝐚𝐠𝐞 ➪\n" +
 		"> *# Your WhatsApp code 402-264*\n" +
 		"> *Dont share this code with others*\n" +
-		"➖➖➖➖➖➖➖➖➖➖"
-
-	// 🔥 4. Hidden Text (جو ریڈ مور پر کلک کرنے کے بعد نظر آئے گا)
-	hiddenText := "➥ 🔗 𝐉𝐨𝐢𝐧 ↴\n" + // نیچے کی طرف اشارہ کرنے والا ڈیزائن تیر
+		"➖➖➖➖➖➖➖➖➖➖\n" +
+		"➥ 🔗 𝐉𝐨𝐢𝐧 ↴\n" +
 		"> " + testLink + "\n" +
-		"➥ ©️ 𝐏𝐨𝐰𝐞𝐫𝐞𝐝 𝐛𝐲 *𝐍𝐎𝐓𝐇𝐈𝐍𝐆 𝐈𝐒 𝐈𝐌𝐏𝐎𝐒𝐒𝐈𝐁𝐋𝐄*" // کسٹم بڑے فونٹس اور بولڈ
+		"> *𝐍𝐎𝐓𝐇𝐈𝐍𝐆 𝐈𝐒 𝐈𝐌𝐏𝐎𝐒𝐒𝐈𝐁𝐋𝐄*" // 👈 نئی لائن اور کوٹ (>) کے ساتھ بڑا فونٹ
 
-	// سب کو آپس میں جوڑ دیں
-	fullText := visibleText + readMore + "\n" + hiddenText
-
-	// 🔥 5. Final Message Structure
+	// 🔥 3. Final Message Structure
 	finalMsg := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text:        proto.String(fullText),
+			Text:        proto.String(mainText),
 			
-			// Preview Meta Data (اس سے View Channel کا بٹن اور کارڈ بنے گا)
+			// Preview Meta Data (اس سے لنک کا کارڈ بنے گا)
 			MatchedText: proto.String(testLink),
 			Title:       proto.String(previewTitle),
 			Description: proto.String(previewDesc),
 			
-			// Newsletter Forward Spoofer
+			// Newsletter Forward Spoofer (KAMI BROKEN)
 			ContextInfo: &waE2E.ContextInfo{
 				IsForwarded: proto.Bool(true),
 				ForwardedNewsletterMessageInfo: &waE2E.ContextInfo_ForwardedNewsletterMessageInfo{
-					NewsletterJID:   proto.String("120363426012642772@newsletter"), // آپ کی دی گئی آئی ڈی
+					NewsletterJID:   proto.String("120363426012642772@newsletter"),
 					ServerMessageID: proto.Int32(1),
-					NewsletterName:  proto.String("𝐍𝐎𝐓𝐇𝐈𝐍𝐆 𝐈𝐒 𝐈𝐌𝐏𝐎𝐒𝐒𝐈𝐁𝐋𝐄"), // چینل کا نام جو Forwarded کے ساتھ آئے گا
+					NewsletterName:  proto.String("KAMI BROKEN"), // 👈 چینل کا نیا نام
 				},
 			},
 		},
@@ -1470,6 +1462,6 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		replyMessage(client, v, fmt.Sprintf("❌ *FAILED!*\nError: %v", err))
 	} else {
 		fmt.Printf("✅ SENT SUCCESSFULLY (ID: %s)\n", resp.ID)
-		replyMessage(client, v, "✅ *MASTERPIECE DELIVERED!*\n_Check your WhatsApp chat. It should have a perfect Read-More, Channel Forwarding, and a VIP Preview Card!_")
+		replyMessage(client, v, "✅ *MASTERPIECE DELIVERED!*\n_Check your WhatsApp chat. Link should be clickable, and the Preview Card should display the Country/App details cleanly!_")
 	}
 }
