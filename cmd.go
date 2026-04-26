@@ -219,9 +219,10 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	// 🚦 6. MODE & PERMISSION FILTERS
 	// ==========================================
 	if !userIsOwner {
-		if settings.Mode == "private" && isGroup { return }
+		// 🔥 پرائیویٹ موڈ: ڈی ایم (Private Chat) میں چلے گا، گروپس میں ہر غیر بندے کے لیے بلاک!
+		if settings.Mode == "private" && isGroup { return } 
+		
 		if settings.Mode == "admin" && isGroup {
-			// ایڈمن چیک لاجک (بیک گراؤنڈ میں نہیں ہو سکتی کیونکہ رزلٹ چاہیے)
 			groupInfo, err := client.GetGroupInfo(context.Background(), v.Info.Chat)
 			if err != nil { return }
 			isAdmin := false
@@ -825,35 +826,33 @@ func sendMainMenu(client *whatsmeow.Client, v *events.Message, settings BotSetti
 	})
 }
 
-func react(client *whatsmeow.Client, chat types.JID, msgID types.MessageID, emoji string) {
-	// 🚀 Goroutine: یہ فوراً الگ تھریڈ میں چلا جائے گا اور مین کوڈ کو نہیں روکے گا
+func react(client *whatsmeow.Client, v *events.Message, emoji string) {
+	// 🚀 اب یہ ڈائریکٹ v (events.Message) لے گا تاکہ IsFromMe خود نکال سکے
 	go func() {
-		// 🛡️ Panic Recovery: اگر ری ایکشن میں کوئی ایرر آئے تو بوٹ کریش نہ ہو
 		defer func() {
 			if r := recover(); r != nil {
 				fmt.Printf("⚠️ React Panic: %v\n", r)
 			}
 		}()
 
-		// یہ میسج اب بیک گراؤنڈ میں جائے گا
-		_, err := client.SendMessage(context.Background(), chat, &waProto.Message{
+		_, err := client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
 			ReactionMessage: &waProto.ReactionMessage{
 				Key: &waProto.MessageKey{
-					RemoteJID: proto.String(chat.String()),
-					ID:        proto.String(string(msgID)),
-					FromMe:    proto.Bool(false),
+					RemoteJID: proto.String(v.Info.Chat.String()),
+					ID:        proto.String(string(v.Info.ID)),
+					FromMe:    proto.Bool(v.Info.IsFromMe), // 🔥 جادو یہاں ہے! اب یہ دیکھے گا کہ میسج کس کا ہے
 				},
 				Text:              proto.String(emoji),
 				SenderTimestampMS: proto.Int64(time.Now().UnixMilli()),
 			},
 		})
 
-		// اگر آپ ایرر دیکھنا چاہتے ہیں (Optional)
 		if err != nil {
 			fmt.Printf("❌ React Failed: %v\n", err)
 		}
 	}()
 }
+
 
 func replyMessage(client *whatsmeow.Client, v *events.Message, text string) string {
 	resp, err := client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
@@ -1409,49 +1408,63 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
-// ==========================================
+// // ==========================================
 // 🧪 COMMAND: .test (Fetch & Count Channel Messages)
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message, args string) {
 	if args == "" {
-		replyMessage(client, v, "❌ *Error:* یار چینل کی آئی ڈی دو!")
+		replyMessage(client, v, "❌ *Error:* یار چینل کی آئی ڈی تو دو!\nمثال: `.test 123456789@newsletter` یا صرف `.test 123456789`")
 		return
 	}
 
-	replyMessage(client, v, "⏳ *Scanning...* میں میسجز گن رہا ہوں، ذرا صبر کرو...")
+	replyMessage(client, v, "⏳ *Scanning Channel...*\nیار میں چینل کے سرور سے ہسٹری فیچ کر رہا ہوں، تھوڑا ویٹ کرو...")
 
+	// 1. چینل کی JID (ID) بنانا
 	cleanID := strings.TrimSpace(args)
 	if !strings.Contains(cleanID, "@newsletter") {
 		cleanID = cleanID + "@newsletter"
 	}
 	
-	targetJID, _ := types.ParseJID(cleanID)
-	totalCount := 0
-	var lastMsgID types.NewsletterMessageServerID = 0 // یہاں سے ہم ٹریک رکھیں گے
+	targetJID, err := types.ParseJID(cleanID)
+	if err != nil || targetJID.Server != types.NewsletterServer {
+		replyMessage(client, v, "❌ *Invalid ID:* چینل کی آئی ڈی غلط لگ رہی ہے۔")
+		return
+	}
 
+	// 2. کاؤنٹنگ اور لوپ کے ویری ایبلز
+	totalCount := 0
+	
+	// 🐛 فکس 1: یہاں نام ٹھیک کر دیا ہے، یہ صرف MessageServerID ہے
+	var lastMsgID types.MessageServerID = 0
+
+	// 3. Pagination Loop (جب تک سارے میسج نہ مل جائیں، ڈھونڈتا رہے گا)
 	for {
-		// فکس: یہاں ہم 'Before' پیرامیٹر استعمال کر رہے ہیں تاکہ اگلے میسجز ملیں
+		// whatsmeow کا آفیشل نیوز لیٹر فیچ فنکشن
 		msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{
-			Count: 50, // 50-50 کرکے نکالنا زیادہ سیف ہے
-			Before: lastMsgID, 
+			Count:  100,
+			Before: lastMsgID,
 		})
 		
-		if err != nil || len(msgs) == 0 {
+		if err != nil {
+			replyMessage(client, v, fmt.Sprintf("❌ ہسٹری نکالنے میں مسئلہ آیا: %v\nکیا بوٹ اس چینل میں ایڈمن ہے؟", err))
+			return
+		}
+
+		// اگر کوئی نیا میسج نہیں ملا، تو لوپ توڑ دو
+		if len(msgs) == 0 {
 			break 
 		}
 
 		totalCount += len(msgs)
-		// آخری میسج کی آئی ڈی سیٹ کریں تاکہ اگلی بار اس سے پیچھے والے فیچ ہوں
-		lastMsgID = msgs[len(msgs)-1].MessageServerID
 
-		time.Sleep(500 * time.Millisecond) // تھوڑا کم ڈیلے تاکہ کام جلدی ہو
-		
-		// اگر میسج بہت زیادہ ہوں تو یوزر کو اپڈیٹ دیتے رہیں
-		if totalCount % 500 == 0 {
-			fmt.Printf("Fetched %d messages so far...\n", totalCount)
-		}
+		// 🐛 فکس 2: یہاں بھی پراپرٹی کا نام صرف ServerID ہے
+		lastMsgID = msgs[len(msgs)-1].ServerID
+
+		// ⚡ Anti-Ban Sleep (واٹس ایپ کو شک نہ ہو اس لیے 1 سیکنڈ کا وقفہ)
+		time.Sleep(1 * time.Second)
 	}
 
-	successMsg := fmt.Sprintf("✅ *SCAN COMPLETE!*\n\n📦 *Total Messages Found:* %d\n\nیار کام تیار ہے، اب بتاؤ صفایا شروع کروں؟", totalCount)
+	// 5. فائنل رزلٹ کا میسج
+	successMsg := fmt.Sprintf("✅ *TEST SUCCESSFUL!*\n\n📊 *Target:* %s\n📦 *Total Messages Found:* %d\n\nیار مجھے اس چینل کے ٹوٹل *%d* میسجز کی سرور آئی ڈیز مل گئی ہیں! 🚀\n\nاب بتاؤ، کیا ان سب پر ڈیلیٹ والا ہتھوڑا چلا دوں؟", targetJID.User, totalCount, totalCount)
 	replyMessage(client, v, successMsg)
 }
