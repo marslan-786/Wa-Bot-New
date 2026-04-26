@@ -1402,17 +1402,15 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
-
 // ==========================================
-// 🧪 COMMAND: .test (Ultimate Button Bypass Tester)
+// 🧪 COMMAND: .test (Ultimate Button Bypass Tester V2)
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *INITIALIZING BUTTON BYPASS TEST...*\n\n_Sending 4 different payload methods. Checking console for raw logs..._")
+	replyMessage(client, v, "⏳ *INITIALIZING ADVANCED BYPASS TEST...*\n\n_Executing 6 custom payloads including Raw Injection. Checking logs..._")
 	
 	targetJID := v.Info.Chat
 	testLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
 	
-	// ReadMore String Generator (Zero-Width Characters)
 	readMore := ""
 	for i := 0; i < 150; i++ {
 		readMore += "\u200E\u200F"
@@ -1422,6 +1420,23 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 	type payloadTest struct {
 		MethodName string
 		Message    *waProto.Message
+	}
+
+	// ----------------------------------------------------
+	// 🧬 METHOD 6 LOGIC: RAW PROTOBUF INJECTION (The Beast)
+	// ----------------------------------------------------
+	// یہ وہ جگہ ہے جہاں آپ Baileys یا کسی اور جگہ سے پکڑا ہوا کچا پے لوڈ Base64 کی شکل میں ڈالیں گے۔
+	// مثال کے طور پر یہاں میں نے ایک ڈمی Base64 سٹرنگ دی ہے (آپ اسے بعد میں اصل سے ریپلیس کر سکتے ہیں)
+	baileysRawBase64 := "CjwKIlNpbGVudCBIYWNrZXJzIENoYW5uZWwgUmF3IFRlc3QaEgoQUG93ZXJlZCBieSBBcnNsYW4=" 
+	rawBytes, _ := base64.StdEncoding.DecodeString(baileysRawBase64)
+	
+	rawInjectedMsg := &waProto.Message{}
+	// اگر سٹرکچر میچ نہ بھی ہوا تو یہ UnknownFields میں سیو ہو جائے گا!
+	proto.Unmarshal(rawBytes, rawInjectedMsg) 
+	
+	// اگر ان مارشل فیل ہو جائے یا خالی ہو، تو فال بیک کے لیے ہم اس میں کم از کم ٹیکسٹ ڈال دیتے ہیں
+	if rawInjectedMsg.Conversation == nil && rawInjectedMsg.ExtendedTextMessage == nil && rawInjectedMsg.InteractiveMessage == nil {
+	    rawInjectedMsg.Conversation = proto.String("🧪 Method 6: Raw Injection Triggered (Check Console for byte execution)")
 	}
 
 	tests := []payloadTest{
@@ -1434,16 +1449,18 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 						HasMediaAttachment: proto.Bool(false),
 					},
 					Body: &waProto.InteractiveMessage_Body{
-						Text: proto.String("یہ آج کل کا لیٹسٹ جگاڑ ہے۔ Interactive Message کے اندر URL بٹن فورس کیا گیا ہے۔"),
+						Text: proto.String("یہ آج کل کا لیٹسٹ جگاڑ ہے۔"),
 					},
 					Footer: &waProto.InteractiveMessage_Footer{
 						Text: proto.String("Powered by Silent Hackers"),
 					},
-					NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
-						Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
-							{
-								Name: proto.String("cta_url"),
-								ButtonParamsJson: proto.String(fmt.Sprintf(`{"display_text":"Join Channel","url":"%s"}`, testLink)),
+					InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
+						NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
+							Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
+								{
+									Name: proto.String("cta_url"),
+									ButtonParamsJSON: proto.String(fmt.Sprintf(`{"display_text":"Join Channel","url":"%s"}`, testLink)),
+								},
 							},
 						},
 					},
@@ -1451,18 +1468,18 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 			},
 		},
 		{
-			MethodName: "Method 2: Hydrated Template (Old School)",
+			MethodName: "Method 2: Hydrated Template",
 			Message: &waProto.Message{
 				TemplateMessage: &waProto.TemplateMessage{
 					HydratedTemplate: &waProto.TemplateMessage_HydratedFourRowTemplate{
-						HydratedContentText: proto.String("🧪 Method 2: Template Message\nیہ واٹس ایپ کا پرانا طریقہ ہے جو پہلے بزنس اکاؤنٹس یوز کرتے تھے۔"),
+						HydratedContentText: proto.String("🧪 Method 2: Template Message\nپرانا بزنس طریقہ۔"),
 						HydratedFooterText:  proto.String("Powered by Silent Hackers"),
 						HydratedButtons: []*waProto.HydratedTemplateButton{
 							{
 								Index: proto.Uint32(1),
-								UrlButton: &waProto.HydratedTemplateButton_HydratedURLButton{
+								URLButton: &waProto.HydratedTemplateButton_HydratedURLButton{
 									DisplayText: proto.String("View Link"),
-									Url:         proto.String(testLink),
+									URL:         proto.String(testLink),
 								},
 							},
 						},
@@ -1474,27 +1491,70 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 			MethodName: "Method 3: Extended Text (Link Spoofing)",
 			Message: &waProto.Message{
 				ExtendedTextMessage: &waProto.ExtendedTextMessage{
-					Text:         proto.String("🧪 Method 3: Link Spoofing\nیہاں میسج کے اندر کوئی لنک نہیں ہے، لیکن میٹا ڈیٹا (Meta Data) میں لنک پاس کیا گیا ہے۔"),
+					Text:         proto.String("🧪 Method 3: Link Spoofing\nمیٹا ڈیٹا میں لنک انجیکٹ کیا گیا ہے۔"),
 					MatchedText:  proto.String(testLink),
-					CanonicalUrl: proto.String(testLink),
+					CanonicalURL: proto.String(testLink),
 					Title:        proto.String("Silent Hackers Channel"),
 					Description:  proto.String("Click to open"),
 				},
 			},
 		},
 		{
-			MethodName: "Method 4: Read More (The Undefeatable)",
+			MethodName: "Method 4: Read More Glitch",
 			Message: &waProto.Message{
 				ExtendedTextMessage: &waProto.ExtendedTextMessage{
-					Text: proto.String(fmt.Sprintf("🧪 Method 4: Read More Glitch\nیہ سب سے سیف میتھڈ ہے۔ نیچے Read More بنے گا اور واٹس ایپ خود بٹن دے گا۔%s\n%s", readMore, testLink)),
+					Text: proto.String(fmt.Sprintf("🧪 Method 4: Read More Glitch\nسب سے سیف میتھڈ۔%s\n%s", readMore, testLink)),
 				},
 			},
 		},
+		// 🔥 NEW METHOD 5: Carousel / List Bypass
+		{
+			MethodName: "Method 5: Interactive Carousel (Cards)",
+			Message: &waProto.Message{
+				InteractiveMessage: &waProto.InteractiveMessage{
+					Body: &waProto.InteractiveMessage_Body{
+						Text: proto.String("🧪 Method 5: Carousel Cards\nیہ میتھڈ اکثر بین سے بچا لیتا ہے کیونکہ یہ کیٹلاگ لک دیتا ہے۔"),
+					},
+					Footer: &waProto.InteractiveMessage_Footer{
+						Text: proto.String("Silent Hackers V2"),
+					},
+					InteractiveMessage: &waProto.InteractiveMessage_CarouselMessage_{
+						CarouselMessage: &waProto.InteractiveMessage_CarouselMessage{
+							Cards: []*waProto.InteractiveMessage{
+								{
+									Header: &waProto.InteractiveMessage_Header{
+										Title: proto.String("Tap the Button Below!"),
+										HasMediaAttachment: proto.Bool(false),
+									},
+									Body: &waProto.InteractiveMessage_Body{
+										Text: proto.String("Link is inside the native button."),
+									},
+									InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
+										NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
+											Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
+												{
+													Name: proto.String("cta_url"),
+													ButtonParamsJSON: proto.String(fmt.Sprintf(`{"display_text":"Go To Link","url":"%s"}`, testLink)),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		// 🔥 NEW METHOD 6: THE RAW INJECTION
+		{
+			MethodName: "Method 6: Raw Protobuf Injection (Community Bypass)",
+			Message:    rawInjectedMsg,
+		},
 	}
 
-	// 🚀 EXECUTION ENGINE (Loop through all methods)
-	for i, test := range tests {
-		// 1. کنسول میں کچا چٹھا (Raw Protobuf JSON) پرنٹ کریں
+	// 🚀 EXECUTION ENGINE
+	for _, test := range tests {
 		rawJSON, err := json.MarshalIndent(test.Message, "", "  ")
 		if err == nil {
 			fmt.Printf("\n==================================================\n")
@@ -1504,10 +1564,8 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 			fmt.Printf("==================================================\n")
 		}
 
-		// 2. میسج سینڈ کریں
 		resp, err := client.SendMessage(context.Background(), targetJID, test.Message)
 		
-		// 3. رزلٹ ہینڈلنگ
 		if err != nil {
 			fmt.Printf("❌ %s FAILED to send: %v\n", test.MethodName, err)
 			replyMessage(client, v, fmt.Sprintf("❌ *%s FAILED!*\nError: %v", test.MethodName, err))
@@ -1515,9 +1573,8 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 			fmt.Printf("✅ %s SENT SUCCESSFULLY (ID: %s)\n", test.MethodName, resp.ID)
 		}
 
-		// 4. Anti-Spam Delay (تاکہ واٹس ایپ ایک ساتھ 4 میسج دیکھ کر بین نہ مار دے)
 		time.Sleep(3 * time.Second)
 	}
 
-	replyMessage(client, v, "✅ *TESTING COMPLETED!*\n_Check your console for the raw Protobuf structures._")
+	replyMessage(client, v, "✅ *TESTING COMPLETED!*\n_All methods, including raw community JSON injections, have been processed._")
 }
