@@ -1405,82 +1405,71 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
-
 // ==========================================
-// 🧪 COMMAND: .test (Link Preview & View Channel Card Enforcer)
+// 🧪 COMMAND: .test (The Ultimate Final V7 - VIP Preview & Forward)
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *INITIALIZING PREVIEW MODE TESTER...*\n\n_Dead button methods removed. Forcing Link Preview Mode (View Channel Card) for spoofing and read-more methods..._ 🚀")
+	replyMessage(client, v, "⏳ *FINALIZING THE MASTERPIECE (V7)...*\n\n_Generating forced Read-More, Channel Forwarding, and VIP Preview Cards..._ 🚀")
 	
 	targetJID := v.Info.Chat
-	testLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
+	testLink := "https://chat.whatsapp.com/ERCeo1A3h4IG7B38xiZZhg"
 	
-	// ReadMore String Generator
-	readMore := ""
-	for i := 0; i < 150; i++ {
-		readMore += "\u200E\u200F"
-	}
+	// 🔥 1. Read More Forcer (Massive Zero-Width Injection)
+	// 2500 بار لوپ چلنے سے یہ 5000 کریکٹرز بنائے گا، جس سے واٹس ایپ 100% ریڈ مور بنائے گا
+	readMore := strings.Repeat("\u200E\u200F", 2500)
 
-	// 🛠️ METHODS DEFINITION
-	type payloadTest struct {
-		MethodName string
-		Message    *waE2E.Message
-	}
+	// 🔥 2. Preview Mode Data (جو کارڈ کے اوپر نظر آئے گا)
+	previewTitle := "⫸ *🇿🇼 | WHATSAPP Message ²* ⫷" // ایموجی کے بجائے ڈیزائننگ تیر
+	previewDesc := "➥ 🌎 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 ➪ 🇳🇵 Nepal\n➥ ⚙️ 𝐀𝐩𝐩 ➪ WHATSAPP"
 
-	tests := []payloadTest{
-		// 🚀 METHOD 1: Link Spoofing (Preview Mode)
-		{
-			MethodName: "Method 1: Link Spoofing (Preview Mode)",
-			Message: &waE2E.Message{
-				ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-					// 🔥 اس ٹیکسٹ میں کوئی لنک نہیں ہے
-					Text:         proto.String("✨ *VIP OTP ALERT* ✨\n\nاس میسج کے ٹیکسٹ میں کوئی لنک نہیں ہے، لیکن ہم نے میٹا ڈیٹا کے ذریعے پریویو (Preview) فورس کیا ہے تاکہ نیچے 'View Channel' کا کارڈ آئے۔"),
-					// 🔥 CanonicalUrl ہٹا دیا گیا ہے، اب صرف یہ فیلڈز کافی ہیں
-					MatchedText:  proto.String(testLink),
-					Title:        proto.String("Silent Hackers VIP"),
-					Description:  proto.String("Official Channel"),
+	// 🔥 3. Main Visible Text (جو ریڈ مور سے پہلے نظر آئے گا)
+	visibleText := "➖➖➖➖➖➖➖➖➖➖\n" +
+		"➥ 📱 𝐍𝐮𝐦𝐛𝐞𝐫 ➪ +9779xxxx350\n" +
+		"➥ 🔑 𝐎𝐓𝐏 ➪ *402264*\n" +
+		"➥ 📩 𝐌𝐞𝐬𝐬𝐚𝐠𝐞 ➪\n" +
+		"> *# Your WhatsApp code 402-264*\n" +
+		"> *Dont share this code with others*\n" +
+		"➖➖➖➖➖➖➖➖➖➖"
+
+	// 🔥 4. Hidden Text (جو ریڈ مور پر کلک کرنے کے بعد نظر آئے گا)
+	hiddenText := "➥ 🔗 𝐉𝐨𝐢𝐧 ↴\n" + // نیچے کی طرف اشارہ کرنے والا ڈیزائن تیر
+		"> " + testLink + "\n" +
+		"➥ ©️ 𝐏𝐨𝐰𝐞𝐫𝐞𝐝 𝐛𝐲 *𝐍𝐎𝐓𝐇𝐈𝐍𝐆 𝐈𝐒 𝐈𝐌𝐏𝐎𝐒𝐒𝐈𝐁𝐋𝐄*" // کسٹم بڑے فونٹس اور بولڈ
+
+	// سب کو آپس میں جوڑ دیں
+	fullText := visibleText + readMore + "\n" + hiddenText
+
+	// 🔥 5. Final Message Structure
+	finalMsg := &waE2E.Message{
+		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+			Text:        proto.String(fullText),
+			
+			// Preview Meta Data (اس سے View Channel کا بٹن اور کارڈ بنے گا)
+			MatchedText: proto.String(testLink),
+			Title:       proto.String(previewTitle),
+			Description: proto.String(previewDesc),
+			
+			// Newsletter Forward Spoofer
+			ContextInfo: &waE2E.ContextInfo{
+				IsForwarded: proto.Bool(true),
+				ForwardedNewsletterMessageInfo: &waE2E.ContextInfo_ForwardedNewsletterMessageInfo{
+					NewsletterJID:   proto.String("120363426012642772@newsletter"), // آپ کی دی گئی آئی ڈی
+					ServerMessageID: proto.Int32(1),
+					NewsletterName:  proto.String("𝐍𝐎𝐓𝐇𝐈𝐍𝐆 𝐈𝐒 𝐈𝐌𝐏𝐎𝐒𝐒𝐈𝐁𝐋𝐄"), // چینل کا نام جو Forwarded کے ساتھ آئے گا
 				},
 			},
 		},
-		// 🚀 METHOD 2: Read More Glitch (Preview Mode)
-		{
-			MethodName: "Method 2: Read More Glitch (Preview Mode)",
-			Message: &waE2E.Message{
-				ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-					// 🔥 ٹیکسٹ، ریڈ مور کریکٹرز اور آخر میں لنک
-					Text:         proto.String(fmt.Sprintf("✨ *VIP OTP ALERT* ✨\nیہ ریڈ مور (Read More) والا میتھڈ ہے۔%s\n%s", readMore, testLink)),
-					// 🔥 CanonicalUrl ہٹا دیا گیا ہے
-					MatchedText:  proto.String(testLink),
-					Title:        proto.String("Silent Hackers VIP"),
-					Description:  proto.String("Join us today!"),
-				},
-			},
-		},
 	}
 
-	// 🚀 EXECUTION ENGINE
-	for _, test := range tests {
-		rawJSON, err := json.MarshalIndent(test.Message, "", "  ")
-		if err == nil {
-			fmt.Printf("\n==================================================\n")
-			fmt.Printf("🚀 FIRING [ %s ]\n", test.MethodName)
-			fmt.Printf("==================================================\n")
-			fmt.Println(string(rawJSON))
-			fmt.Printf("==================================================\n")
-		}
-
-		resp, err := client.SendMessage(context.Background(), targetJID, test.Message)
-		
-		if err != nil {
-			fmt.Printf("❌ %s FAILED to send: %v\n", test.MethodName, err)
-			replyMessage(client, v, fmt.Sprintf("❌ *%s FAILED!*\nError: %v", test.MethodName, err))
-		} else {
-			fmt.Printf("✅ %s SENT SUCCESSFULLY (ID: %s)\n", test.MethodName, resp.ID)
-		}
-
-		// Anti-Spam Delay
-		time.Sleep(3 * time.Second)
+	// 🚀 EXECUTION
+	fmt.Printf("\n🚀 FIRING VIP PREVIEW METHOD\n")
+	resp, err := client.SendMessage(context.Background(), targetJID, finalMsg)
+	
+	if err != nil {
+		fmt.Printf("❌ FAILED to send: %v\n", err)
+		replyMessage(client, v, fmt.Sprintf("❌ *FAILED!*\nError: %v", err))
+	} else {
+		fmt.Printf("✅ SENT SUCCESSFULLY (ID: %s)\n", resp.ID)
+		replyMessage(client, v, "✅ *MASTERPIECE DELIVERED!*\n_Check your WhatsApp chat. It should have a perfect Read-More, Channel Forwarding, and a VIP Preview Card!_")
 	}
-
-	replyMessage(client, v, "✅ *PREVIEW TESTING COMPLETED!*\n_Check your WhatsApp. The channel links should now render as a Preview Card at the bottom of the message._")
 }
