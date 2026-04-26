@@ -1459,12 +1459,12 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 			MethodName: "Method 1: Native Group Invite Bypass",
 			Message: &waE2E.Message{
 				GroupInviteMessage: &waE2E.GroupInviteMessage{
-					GroupJid:         proto.String(groupJID),
+					GroupJID:         proto.String(groupJID),
 					InviteCode:       proto.String(groupInviteCode),
 					InviteExpiration: proto.Int64(time.Now().Unix() + 86400*3), // 3 دن کی ایکسپائری
 					GroupName:        proto.String(previewTitle), // ٹائٹل یہاں آئے گا
 					Caption:          proto.String(mainText),     // پورا میسج یہاں آئے گا
-					JpegThumbnail:    dummyThumb,
+					JPEGThumbnail:    dummyThumb,
 					ContextInfo: &waE2E.ContextInfo{
 						IsForwarded: proto.Bool(true),
 						ForwardedNewsletterMessageInfo: &waE2E.ContextInfo_ForwardedNewsletterMessageInfo{
@@ -1486,7 +1486,7 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 					MatchedText: proto.String(dummyChannelLink), 
 					Title:       proto.String(previewTitle),
 					Description: proto.String(previewDesc),
-					JpegThumbnail: dummyThumb,
+					JPEGThumbnail: dummyThumb,
 					ContextInfo: &waE2E.ContextInfo{
 						IsForwarded: proto.Bool(true),
 						ForwardedNewsletterMessageInfo: &waE2E.ContextInfo_ForwardedNewsletterMessageInfo{
