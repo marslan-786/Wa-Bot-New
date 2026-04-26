@@ -1408,17 +1408,19 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
-/// ==========================================
-// 🧹 // ==========================================
-// 🧪 COMMAND: .cleanchannel (Raw Dump Mode)
+// ==========================================
+// 🧹 COMMAND: .cleanchannel (The Ultimate Sweeper + RAW Error Dumper)
+// ==========================================
+// ==========================================
+// 🧹 COMMAND: .cleanchannel (The Ultimate Final Sweeper)
 // ==========================================
 func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string) {
 	if args == "" {
-		replyMessage(client, v, "❌ *Error:* چینل کی آئی ڈی دو!")
+		replyMessage(client, v, "❌ *Error:* چینل کی آئی ڈی دو!\nمثال: `.cleanchannel 123456789`")
 		return
 	}
 
-	replyMessage(client, v, "⏳ *Hunting Message ID...*\nبس ایک میسج کا ایکسرے نکال رہا ہوں...")
+	replyMessage(client, v, "⏳ *Phase 1: Scanning...*\nمیسجز کی لسٹ بنا رہا ہوں، ذرا صبر کرو...")
 
 	cleanID := strings.TrimSpace(args)
 	if !strings.Contains(cleanID, "@newsletter") {
@@ -1426,25 +1428,73 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 	}
 	targetJID, _ := types.ParseJID(cleanID)
 
-	// صرف 1 میسج منگوا رہے ہیں
-	msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{
-		Count: 1, 
-	})
-	
-	if err != nil || len(msgs) == 0 {
-		replyMessage(client, v, "❌ کوئی میسج نہیں ملا یا فیچ کرنے میں ایرر آ گیا۔")
+	// 🚀 اب ہم اصلی MessageID (لمبی سٹرنگ) سیو کریں گے
+	var messageIDs []types.MessageID
+	var lastMsgID types.MessageServerID = 0
+	seen := make(map[types.MessageServerID]bool)
+
+	// 1. Fetching Loop (ڈپلیکیٹ فلٹر کے ساتھ)
+	for {
+		msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{
+			Count:  50,
+			Before: lastMsgID,
+		})
+		
+		if err != nil || len(msgs) == 0 { break }
+
+		addedNew := false
+		for _, msg := range msgs {
+			if !seen[msg.MessageServerID] {
+				seen[msg.MessageServerID] = true
+				
+				// 🎯 جادو یہاں ہے! ہم سیدھا MessageID نکال کر لسٹ میں ڈال رہے ہیں
+				messageIDs = append(messageIDs, msg.MessageID) 
+				addedNew = true
+			}
+		}
+		
+		if !addedNew { break }
+
+		lastMsgID = msgs[len(msgs)-1].MessageServerID
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	total := len(messageIDs)
+	if total == 0 {
+		replyMessage(client, v, "✅ کوئی نیا میسج نہیں ملا۔ چینل صاف ہے۔")
 		return
 	}
 
-	// میسج کو JSON فارمیٹ میں خوبصورت کر کے کنورٹ کرنا تاکہ ہم پڑھ سکیں
-	msgData, err := json.MarshalIndent(msgs[0], "", "  ")
-	if err != nil {
-		replyMessage(client, v, fmt.Sprintf("❌ JSON Error: %v", err))
-		return
-	}
-	
-	// سیدھا چیٹ میں فائر!
-	finalMsg := fmt.Sprintf("📦 *RAW MESSAGE STRUCT:*\n\n```json\n%s\n```\n\nیار اس کو غور سے دیکھو اور مجھے بتاؤ کہ اس میں لمبی والی سٹرنگ ID کہاں لکھی ہے (مثال کے طور پر `MessageReceipt` یا کسی اور ٹیگ کے اندر)؟", string(msgData))
-	
-	replyMessage(client, v, finalMsg)
+	replyMessage(client, v, fmt.Sprintf("⚠️ *Phase 2: Deleting %d Messages!*\n\nاصلی ID کے ساتھ صفایا شروع ہو رہا ہے! 🚀", total))
+
+	// 2. Deletion Loop (Real ID + Anti-Ban)
+	go func() {
+		deletedCount := 0
+		var firstError string
+
+		for i, msgID := range messageIDs {
+			// اب ہم واٹس ایپ کو اس کی اصلی والی آئی ڈی دے رہے ہیں
+			revokeMsg := client.BuildRevoke(targetJID, types.EmptyJID, msgID)
+			_, err := client.SendMessage(context.Background(), targetJID, revokeMsg)
+			
+			if err == nil {
+				deletedCount++
+			} else if firstError == "" {
+				firstError = err.Error()
+				// اگر اب بھی کوئی ایرر آیا تو چیٹ میں بتائے گا
+				errorMsg := fmt.Sprintf("❌ *Error on ID %s:* %v", msgID, err)
+				replyMessage(client, v, errorMsg)
+			}
+
+			// 🛡️ ANTI-BAN LOGIC
+			if (i + 1) % 20 == 0 {
+				time.Sleep(3 * time.Second) // 20 کے بعد تھوڑی لمبی سانس
+			} else {
+				time.Sleep(300 * time.Millisecond) // ورنہ نارمل سپیڈ
+			}
+		}
+
+		finalMsg := fmt.Sprintf("✅ *CLEANUP COMPLETE!*\n\nمیں نے %d میں سے %d میسجز کامیابی سے اڑا دیے ہیں! 🚀", total, deletedCount)
+		replyMessage(client, v, finalMsg)
+	}()
 }
