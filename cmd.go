@@ -1405,10 +1405,10 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 }
 
 // ==========================================
-// 🧪 COMMAND: .test (Ultimate Bypass Tester V3 - Fixed Edition)
+// 🧪 COMMAND: .test (Ultimate Bypass Tester V4 - Modern Edition)
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *INITIALIZING THE ULTIMATE ARSENAL (V3)...*\n\n_Scanning community bypasses. Firing 7 different payload structures. Monitor your terminal for RAW Protobuf bytes!_ 🚀")
+	replyMessage(client, v, "⏳ *INITIALIZING THE MODERN ARSENAL (V4)...*\n\n_Legacy methods removed. Firing 6 latest payload structures including Carousel & Raw Injection. Monitor your terminal!_ 🚀")
 	
 	targetJID := v.Info.Chat
 	testLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
@@ -1420,7 +1420,7 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 	}
 
 	// ----------------------------------------------------
-	// 🧬 METHOD 7 LOGIC: RAW PROTOBUF INJECTION
+	// 🧬 METHOD 6 LOGIC: RAW PROTOBUF INJECTION
 	// ----------------------------------------------------
 	baileysRawBase64 := "CjwKIlNpbGVudCBIYWNrZXJzIENoYW5uZWwgUmF3IFRlc3QaEgoQUG93ZXJlZCBieSBBcnNsYW4=" 
 	rawBytes, _ := base64.StdEncoding.DecodeString(baileysRawBase64)
@@ -1429,7 +1429,7 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 	proto.Unmarshal(rawBytes, rawInjectedMsg) 
 	
 	if rawInjectedMsg.Conversation == nil && rawInjectedMsg.ExtendedTextMessage == nil && rawInjectedMsg.InteractiveMessage == nil {
-	    rawInjectedMsg.Conversation = proto.String("🧪 Method 7: Raw Base64 Injection Triggered (Check Console)")
+	    rawInjectedMsg.Conversation = proto.String("🧪 Method 6: Raw Base64 Injection Triggered (Check Console)")
 	}
 
 	// 🛠️ METHODS DEFINITION
@@ -1449,7 +1449,7 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 						HasMediaAttachment: proto.Bool(false),
 					},
 					Body: &waProto.InteractiveMessage_Body{
-						Text: proto.String("یہ واٹس ایپ کا لیٹسٹ کلاؤڈ API میتھڈ ہے جو Baileys یوز کرتا ہے۔"),
+						Text: proto.String("یہ واٹس ایپ کا لیٹسٹ کلاؤڈ API میتھڈ ہے۔"),
 					},
 					Footer: &waProto.InteractiveMessage_Footer{
 						Text: proto.String("Silent Hackers"),
@@ -1480,7 +1480,6 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 					},
 					InteractiveMessage: &waProto.InteractiveMessage_CarouselMessage_{
 						CarouselMessage: &waProto.InteractiveMessage_CarouselMessage{
-							// 🔥 FIX 1: Changed *waProto.Message to *waProto.InteractiveMessage
 							Cards: []*waProto.InteractiveMessage{
 								{
 									Header: &waProto.InteractiveMessage_Header{
@@ -1488,7 +1487,7 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 										HasMediaAttachment: proto.Bool(false),
 									},
 									Body: &waProto.InteractiveMessage_Body{
-										Text: proto.String("Click below to join our main channel."),
+										Text: proto.String("Click below to join."),
 									},
 									InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
 										NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
@@ -1507,13 +1506,13 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 				},
 			},
 		},
-		// 🚀 METHOD 3: Legacy List Message (Menu Style)
+		// 🚀 METHOD 3: Legacy List Message (Menu Style - Still supported)
 		{
 			MethodName: "Method 3: Legacy List Message",
 			Message: &waProto.Message{
 				ListMessage: &waProto.ListMessage{
 					Title:       proto.String("🧪 M3: List Message"),
-					Description: proto.String("یہ پرانا مینیو والا طریقہ ہے۔"),
+					Description: proto.String("یہ مینیو والا طریقہ ہے۔"),
 					ButtonText:  proto.String("Tap Here"),
 					ListType:    waProto.ListMessage_SINGLE_SELECT.Enum(),
 					Sections: []*waProto.ListMessage_Section{
@@ -1522,7 +1521,6 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 							Rows: []*waProto.ListMessage_Row{
 								{
 									Title:       proto.String("Channel Link"),
-									// 🔥 FIX 2: Changed RowId to RowID
 									RowID:       proto.String("link_1"),
 									Description: proto.String("یہ ریپلائی کرے گا، ڈائریکٹ نہیں کھولے گا۔"),
 								},
@@ -1532,59 +1530,37 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 				},
 			},
 		},
-		// 🚀 METHOD 4: Hydrated Template (Very Old School)
-		{
-			MethodName: "Method 4: Hydrated Template",
-			Message: &waProto.Message{
-				TemplateMessage: &waProto.TemplateMessage{
-					HydratedTemplate: &waProto.TemplateMessage_HydratedFourRowTemplate{
-						HydratedContentText: proto.String("🧪 M4: Template Message\n2022 والا مشہور طریقہ۔"),
-						HydratedFooterText:  proto.String("Silent Hackers"),
-						HydratedButtons: []*waProto.HydratedTemplateButton{
-							{
-								Index: proto.Uint32(1),
-								// 🔥 FIX 3: Changed UrlButton to URLButton
-								URLButton: &waProto.HydratedTemplateButton_HydratedURLButton{
-									DisplayText: proto.String("View Link"),
-									URL:         proto.String(testLink),
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		// 🔥 METHOD 5 (Legacy Buttons) has been deleted because WhatsApp/whatsmeow removed it completely.
+		// 🔥 Legacy Buttons and Hydrated Templates are REMOVED because they don't exist in latest protobufs anymore.
 
-		// 🚀 METHOD 5: Extended Text (Link Spoofing)
+		// 🚀 METHOD 4: Extended Text (Link Spoofing)
 		{
-			MethodName: "Method 5: Link Spoofing",
+			MethodName: "Method 4: Link Spoofing",
 			Message: &waProto.Message{
 				ExtendedTextMessage: &waProto.ExtendedTextMessage{
-					Text:        proto.String("🧪 M5: Link Spoofing\nبیک گراؤنڈ میں میٹا ڈیٹا میں لنک ہے۔"),
+					Text:        proto.String("🧪 M4: Link Spoofing\nبیک گراؤنڈ میں میٹا ڈیٹا میں لنک ہے۔"),
 					MatchedText: proto.String(testLink),
 					Title:       proto.String("Silent Hackers Channel"),
 					Description: proto.String("Click to open"),
 				},
 			},
 		},
-		// 🚀 METHOD 6: The Undefeatable (Read More Glitch)
+		// 🚀 METHOD 5: The Undefeatable (Read More Glitch)
 		{
-			MethodName: "Method 6: Read More Glitch",
+			MethodName: "Method 5: Read More Glitch",
 			Message: &waProto.Message{
 				ExtendedTextMessage: &waProto.ExtendedTextMessage{
-					Text: proto.String(fmt.Sprintf("🧪 M6: Read More Glitch\nسب سے سیف اور 100%% ورکنگ میتھڈ۔%s\n%s", readMore, testLink)),
+					Text: proto.String(fmt.Sprintf("🧪 M5: Read More Glitch\nسب سے سیف اور 100%% ورکنگ میتھڈ۔%s\n%s", readMore, testLink)),
 				},
 			},
 		},
-		// 🚀 METHOD 7: THE RAW INJECTION
+		// 🚀 METHOD 6: THE RAW INJECTION
 		{
-			MethodName: "Method 7: Raw Protobuf Injection",
+			MethodName: "Method 6: Raw Protobuf Injection",
 			Message:    rawInjectedMsg,
 		},
 	}
 
-	// 🚀 EXECUTION ENGINE (Looping through the Arsenal)
+	// 🚀 EXECUTION ENGINE
 	for _, test := range tests {
 		rawJSON, err := json.MarshalIndent(test.Message, "", "  ")
 		if err == nil {
@@ -1608,5 +1584,5 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		time.Sleep(4 * time.Second)
 	}
 
-	replyMessage(client, v, "✅ *TESTING COMPLETED!*\n_All methods deployed successfully. Check terminal for Raw JSON payloads._")
+	replyMessage(client, v, "✅ *TESTING COMPLETED!*\n_Check terminal for Raw JSON payloads._")
 }
