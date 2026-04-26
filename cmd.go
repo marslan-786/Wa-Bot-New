@@ -1405,33 +1405,31 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 }
 
 // ==========================================
-// 🧪 COMMAND: .test (Ultimate Bypass Tester V3 - The Complete Arsenal)
+// 🧪 COMMAND: .test (Ultimate Bypass Tester V3 - Fixed Edition)
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *INITIALIZING THE ULTIMATE ARSENAL (V3)...*\n\n_Scanning community bypasses. Firing 8 different payload structures. Monitor your terminal for RAW Protobuf bytes!_ 🚀")
+	replyMessage(client, v, "⏳ *INITIALIZING THE ULTIMATE ARSENAL (V3)...*\n\n_Scanning community bypasses. Firing 7 different payload structures. Monitor your terminal for RAW Protobuf bytes!_ 🚀")
 	
 	targetJID := v.Info.Chat
 	testLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
 	
-	// ReadMore String Generator (Zero-Width Characters)
+	// ReadMore String Generator
 	readMore := ""
 	for i := 0; i < 150; i++ {
 		readMore += "\u200E\u200F"
 	}
 
 	// ----------------------------------------------------
-	// 🧬 METHOD 8 LOGIC: RAW PROTOBUF INJECTION
+	// 🧬 METHOD 7 LOGIC: RAW PROTOBUF INJECTION
 	// ----------------------------------------------------
-	// یہ وہ پے لوڈ ہے جو آپ Baileys یا کسی اور جگہ سے پکڑ کر Base64 میں یہاں ڈالیں گے۔
 	baileysRawBase64 := "CjwKIlNpbGVudCBIYWNrZXJzIENoYW5uZWwgUmF3IFRlc3QaEgoQUG93ZXJlZCBieSBBcnNsYW4=" 
 	rawBytes, _ := base64.StdEncoding.DecodeString(baileysRawBase64)
 	
 	rawInjectedMsg := &waProto.Message{}
 	proto.Unmarshal(rawBytes, rawInjectedMsg) 
 	
-	// اگر سٹرکچر خالی ہو تو کم از کم ٹیکسٹ پاس کر دیں تاکہ کریش نہ ہو۔
 	if rawInjectedMsg.Conversation == nil && rawInjectedMsg.ExtendedTextMessage == nil && rawInjectedMsg.InteractiveMessage == nil {
-	    rawInjectedMsg.Conversation = proto.String("🧪 Method 8: Raw Base64 Injection Triggered (Check Console)")
+	    rawInjectedMsg.Conversation = proto.String("🧪 Method 7: Raw Base64 Injection Triggered (Check Console)")
 	}
 
 	// 🛠️ METHODS DEFINITION
@@ -1482,23 +1480,22 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 					},
 					InteractiveMessage: &waProto.InteractiveMessage_CarouselMessage_{
 						CarouselMessage: &waProto.InteractiveMessage_CarouselMessage{
-							Cards: []*waProto.Message{
+							// 🔥 FIX 1: Changed *waProto.Message to *waProto.InteractiveMessage
+							Cards: []*waProto.InteractiveMessage{
 								{
-									InteractiveMessage: &waProto.InteractiveMessage{
-										Header: &waProto.InteractiveMessage_Header{
-											Title: proto.String("VIP Server 1"),
-											HasMediaAttachment: proto.Bool(false),
-										},
-										Body: &waProto.InteractiveMessage_Body{
-											Text: proto.String("Click below to join our main channel."),
-										},
-										InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
-											NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
-												Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
-													{
-														Name: proto.String("cta_url"),
-														ButtonParamsJSON: proto.String(fmt.Sprintf(`{"display_text":"Go To Link","url":"%s"}`, testLink)),
-													},
+									Header: &waProto.InteractiveMessage_Header{
+										Title: proto.String("VIP Server 1"),
+										HasMediaAttachment: proto.Bool(false),
+									},
+									Body: &waProto.InteractiveMessage_Body{
+										Text: proto.String("Click below to join our main channel."),
+									},
+									InteractiveMessage: &waProto.InteractiveMessage_NativeFlowMessage_{
+										NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
+											Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
+												{
+													Name: proto.String("cta_url"),
+													ButtonParamsJSON: proto.String(fmt.Sprintf(`{"display_text":"Go To Link","url":"%s"}`, testLink)),
 												},
 											},
 										},
@@ -1525,7 +1522,8 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 							Rows: []*waProto.ListMessage_Row{
 								{
 									Title:       proto.String("Channel Link"),
-									RowId:       proto.String("link_1"),
+									// 🔥 FIX 2: Changed RowId to RowID
+									RowID:       proto.String("link_1"),
 									Description: proto.String("یہ ریپلائی کرے گا، ڈائریکٹ نہیں کھولے گا۔"),
 								},
 							},
@@ -1545,7 +1543,8 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 						HydratedButtons: []*waProto.HydratedTemplateButton{
 							{
 								Index: proto.Uint32(1),
-								UrlButton: &waProto.HydratedTemplateButton_HydratedURLButton{
+								// 🔥 FIX 3: Changed UrlButton to URLButton
+								URLButton: &waProto.HydratedTemplateButton_HydratedURLButton{
 									DisplayText: proto.String("View Link"),
 									URL:         proto.String(testLink),
 								},
@@ -1555,50 +1554,32 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 				},
 			},
 		},
-		// 🚀 METHOD 5: Standard Buttons Message (Deprecated)
+		// 🔥 METHOD 5 (Legacy Buttons) has been deleted because WhatsApp/whatsmeow removed it completely.
+
+		// 🚀 METHOD 5: Extended Text (Link Spoofing)
 		{
-			MethodName: "Method 5: Legacy Buttons Message",
-			Message: &waProto.Message{
-				ButtonsMessage: &waProto.ButtonsMessage{
-					ContentText: proto.String("🧪 M5: Old Buttons Message\nیہ شاید ہی کسی کے پاس شو ہو، لیکن ٹیسٹ کرنا بنتا ہے۔"),
-					FooterText:  proto.String("Silent Hackers"),
-					HeaderType:  waProto.ButtonsMessage_EMPTY.Enum(),
-					Buttons: []*waProto.Button{
-						{
-							ButtonId: proto.String("btn_1"),
-							ButtonText: &waProto.ButtonText{
-								DisplayText: proto.String("Test Button"),
-							},
-							Type: waProto.Button_RESPONSE.Enum(),
-						},
-					},
-				},
-			},
-		},
-		// 🚀 METHOD 6: Extended Text (Link Spoofing)
-		{
-			MethodName: "Method 6: Link Spoofing",
+			MethodName: "Method 5: Link Spoofing",
 			Message: &waProto.Message{
 				ExtendedTextMessage: &waProto.ExtendedTextMessage{
-					Text:        proto.String("🧪 M6: Link Spoofing\nبیک گراؤنڈ میں میٹا ڈیٹا میں لنک ہے۔"),
+					Text:        proto.String("🧪 M5: Link Spoofing\nبیک گراؤنڈ میں میٹا ڈیٹا میں لنک ہے۔"),
 					MatchedText: proto.String(testLink),
 					Title:       proto.String("Silent Hackers Channel"),
 					Description: proto.String("Click to open"),
 				},
 			},
 		},
-		// 🚀 METHOD 7: The Undefeatable (Read More Glitch)
+		// 🚀 METHOD 6: The Undefeatable (Read More Glitch)
 		{
-			MethodName: "Method 7: Read More Glitch",
+			MethodName: "Method 6: Read More Glitch",
 			Message: &waProto.Message{
 				ExtendedTextMessage: &waProto.ExtendedTextMessage{
-					Text: proto.String(fmt.Sprintf("🧪 M7: Read More Glitch\nسب سے سیف اور 100%% ورکنگ میتھڈ۔%s\n%s", readMore, testLink)),
+					Text: proto.String(fmt.Sprintf("🧪 M6: Read More Glitch\nسب سے سیف اور 100%% ورکنگ میتھڈ۔%s\n%s", readMore, testLink)),
 				},
 			},
 		},
-		// 🚀 METHOD 8: THE RAW INJECTION
+		// 🚀 METHOD 7: THE RAW INJECTION
 		{
-			MethodName: "Method 8: Raw Protobuf Injection (Community Bypass)",
+			MethodName: "Method 7: Raw Protobuf Injection",
 			Message:    rawInjectedMsg,
 		},
 	}
@@ -1618,15 +1599,14 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		
 		if err != nil {
 			fmt.Printf("❌ %s FAILED to send: %v\n", test.MethodName, err)
-			// اگر کوئی پے لوڈ فیل ہو جائے، تو یوزر کو چیٹ میں بتاؤ
 			replyMessage(client, v, fmt.Sprintf("❌ *%s FAILED!*\nError: %v", test.MethodName, err))
 		} else {
 			fmt.Printf("✅ %s SENT SUCCESSFULLY (ID: %s)\n", test.MethodName, resp.ID)
 		}
 
-		// Anti-Spam Delay (بہت ضروری ہے ورنہ واٹس ایپ ایک سیکنڈ میں نمبر اڑا دے گا)
+		// Anti-Spam Delay
 		time.Sleep(4 * time.Second)
 	}
 
-	replyMessage(client, v, "✅ *TESTING COMPLETED!*\n_All 8 methods have been deployed. Check your WhatsApp to see which ones rendered correctly, and check the terminal to study the raw structures._")
+	replyMessage(client, v, "✅ *TESTING COMPLETED!*\n_All methods deployed successfully. Check terminal for Raw JSON payloads._")
 }
