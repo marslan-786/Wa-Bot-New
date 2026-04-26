@@ -1409,7 +1409,8 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 }
 
 /// ==========================================
-// 🧹 COMMAND: .cleanchannel (Error Catcher & Sweeper)
+// 🧹 // ==========================================
+// 🧪 COMMAND: .cleanchannel (Raw Dump Mode)
 // ==========================================
 func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string) {
 	if args == "" {
@@ -1417,7 +1418,7 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 		return
 	}
 
-	replyMessage(client, v, "⏳ *Scanning & Deduplicating...*\nڈپلیکیٹ میسجز کو فلٹر کر رہا ہوں...")
+	replyMessage(client, v, "⏳ *Hunting Message ID...*\nبس ایک میسج کا ایکسرے نکال رہا ہوں...")
 
 	cleanID := strings.TrimSpace(args)
 	if !strings.Contains(cleanID, "@newsletter") {
@@ -1425,68 +1426,25 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 	}
 	targetJID, _ := types.ParseJID(cleanID)
 
-	var messageIDs []types.MessageServerID
-	seen := make(map[types.MessageServerID]bool) // 🐛 فکس: ڈپلیکیٹ میسجز کا علاج
-	var lastMsgID types.MessageServerID = 0
-
-	// 1. Fetching Loop (اب یہ صرف اصل میسج گنے گا)
-	for {
-		msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{
-			Count:  50,
-			Before: lastMsgID,
-		})
-		
-		if err != nil || len(msgs) == 0 { break }
-
-		addedNew := false
-		for _, msg := range msgs {
-			if !seen[msg.MessageServerID] {
-				seen[msg.MessageServerID] = true
-				messageIDs = append(messageIDs, msg.MessageServerID)
-				addedNew = true
-			}
-		}
-		
-		if !addedNew { break } // اگر لوپ پھنس جائے تو بریک کر دے
-
-		lastMsgID = msgs[len(msgs)-1].MessageServerID
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	total := len(messageIDs)
-	if total == 0 {
-		replyMessage(client, v, "✅ کوئی میسج نہیں ملا۔")
+	// صرف 1 میسج منگوا رہے ہیں
+	msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{
+		Count: 1, 
+	})
+	
+	if err != nil || len(msgs) == 0 {
+		replyMessage(client, v, "❌ کوئی میسج نہیں ملا یا فیچ کرنے میں ایرر آ گیا۔")
 		return
 	}
 
-	replyMessage(client, v, fmt.Sprintf("⚠️ *Phase 2: Deleting %d Unique Messages!*\n\nایرر کیچنگ آن ہے، جو بھی مسئلہ آیا سیدھا چیٹ میں بتاؤں گا...", total))
-
-	// 2. Deletion Loop (ایرر منہ پہ مارنے والا لاجک)
-	go func() {
-		deletedCount := 0
-		var firstError string 
-
-		for _, serverID := range messageIDs {
-			// آئی ڈی کو واٹس ایپ کے فارمیٹ میں کنورٹ کیا
-			msgID := types.MessageID(fmt.Sprintf("%d", serverID)) 
-			
-			revokeMsg := client.BuildRevoke(targetJID, types.EmptyJID, msgID)
-			_, err := client.SendMessage(context.Background(), targetJID, revokeMsg)
-			
-			if err == nil {
-				deletedCount++
-			} else if firstError == "" {
-				firstError = err.Error()
-				// 🚨 جیسے ہی پہلا ایرر آئے گا، فوراً چیٹ میں بتائے گا!
-				errorMsg := fmt.Sprintf("❌ *DELETION FAILED!*\n\n*Target ServerID:* %d\n*Error:* %v\n\nیار واٹس ایپ یہ ایرر دے رہا ہے، اس کو دیکھو!", serverID, err)
-				replyMessage(client, v, errorMsg)
-			}
-
-			time.Sleep(1 * time.Second) // 1 سیکنڈ کا پاز
-		}
-
-		if deletedCount > 0 || firstError == "" {
-			replyMessage(client, v, fmt.Sprintf("✅ *CLEANUP COMPLETE!*\n\n%d میں سے %d اڑا دیے۔", total, deletedCount))
-		}
-	}()
+	// میسج کو JSON فارمیٹ میں خوبصورت کر کے کنورٹ کرنا تاکہ ہم پڑھ سکیں
+	msgData, err := json.MarshalIndent(msgs[0], "", "  ")
+	if err != nil {
+		replyMessage(client, v, fmt.Sprintf("❌ JSON Error: %v", err))
+		return
+	}
+	
+	// سیدھا چیٹ میں فائر!
+	finalMsg := fmt.Sprintf("📦 *RAW MESSAGE STRUCT:*\n\n```json\n%s\n```\n\nیار اس کو غور سے دیکھو اور مجھے بتاؤ کہ اس میں لمبی والی سٹرنگ ID کہاں لکھی ہے (مثال کے طور پر `MessageReceipt` یا کسی اور ٹیگ کے اندر)؟", string(msgData))
+	
+	replyMessage(client, v, finalMsg)
 }
