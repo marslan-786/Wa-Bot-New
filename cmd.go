@@ -188,7 +188,7 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 				client.MarkRead(context.Background(), []types.MessageID{v.Info.ID}, v.Info.Timestamp, v.Info.Chat, v.Info.Sender)
 			}
 			if settings.StatusReact {
-				react(client, v.Info.Chat, v.Info.ID, "💚")
+				react(client, v, "💚")
 			}
 		}()
 		return 
@@ -210,7 +210,7 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 
             emojis := []string{"❤️", "🔥", "🚀", "👍", "💯", "😎", "😂", "✨", "🎉", "💖"}
             randomEmoji := emojis[rand.Intn(len(emojis))]
-            react(client, v.Info.Chat, v.Info.ID, randomEmoji)
+            react(client, v, randomEmoji)
         }
 
 	}()
@@ -300,264 +300,264 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
     
 	// 👑 OWNER COMMANDS (With Specific Reactions)
 	case "setprefix":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "⚙️")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "⚙️")
 		go handleSetPrefix(client, v, fullArgs)
 
 	case "mode":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "🛡️")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "🛡️")
 		go handleMode(client, v, fullArgs)
 
 	case "alwaysonline":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "🟢")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "🟢")
 		go handleToggleSetting(client, v, "Always Online", "always_online", fullArgs)
 
 	case "autoread":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "👁️")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "👁️")
 		go handleToggleSetting(client, v, "Auto Read", "auto_read", fullArgs)
 
 	case "autoreact":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "❤️")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "❤️")
 		go handleToggleSetting(client, v, "Auto React", "auto_react", fullArgs)
 
 	case "autostatus":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "📲")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "📲")
 		go handleToggleSetting(client, v, "Auto Status View", "auto_status", fullArgs)
 
 	case "statusreact":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "💚")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "💚")
 		go handleToggleSetting(client, v, "Status React", "status_react", fullArgs)
 
 	case "listbots":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "🤖")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "🤖")
 		go handleListBots(client, v)
 
 	case "stats":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "📊")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "📊")
 		go handleStats(client, v, settings.UptimeStart)
 
 
 	// 🌐 PUBLIC/GENERAL COMMANDS
 	case "menu", "help":
-		react(client, v.Info.Chat, v.Info.ID, "📂")
+		react(client, v, "📂")
 		go sendMainMenu(client, v, settings)
 
 	case "play", "song":
-		react(client, v.Info.Chat, v.Info.ID, "🎵")
+		react(client, v, "🎵")
 		go handlePlayMusic(client, v, fullArgs)
 
 	case "yts":
-		react(client, v.Info.Chat, v.Info.ID, "🔍")
+		react(client, v, "🔍")
 		go handleYTS(client, v, fullArgs)
 
 	case "tts":
-		react(client, v.Info.Chat, v.Info.ID, "🔍")
+		react(client, v, "🔍")
 		go handleTTSearch(client, v, fullArgs)
 
 	case "video":
-		react(client, v.Info.Chat, v.Info.ID, "📽️")
+		react(client, v, "📽️")
 		go handleVideoSearch(client, v, fullArgs)
     
     	// 🌐 PUBLIC/GENERAL COMMANDS
 	case "pair":
 		// یہاں اونر چیک نہیں ہے! کوئی بھی یوز کر سکتا ہے
-		react(client, v.Info.Chat, v.Info.ID, "🔗")
+		react(client, v, "🔗")
 		go handlePair(client, v, fullArgs)
 		
 	// 🛡️ GROUP ADMIN COMMANDS
 	case "antilink":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleGroupToggle(client, v, "Anti-Link", "antilink", fullArgs)
 	case "antipic":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleGroupToggle(client, v, "Anti-Picture", "antipic", fullArgs)
 	case "antivideo":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleGroupToggle(client, v, "Anti-Video", "antivideo", fullArgs)
 	case "antisticker":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleGroupToggle(client, v, "Anti-Sticker", "antisticker", fullArgs)
 	case "welcome":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleGroupToggle(client, v, "Welcome Message", "welcome", fullArgs)
 	case "antideletes":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleGroupToggle(client, v, "Anti-Delete", "antidelete", fullArgs)
 
 	case "kick":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleKick(client, v, fullArgs)
 	case "add":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleAdd(client, v, fullArgs)
 	case "promote":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handlePromote(client, v, fullArgs)
 	case "demote":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleDemote(client, v, fullArgs)
 	case "group":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleGroupState(client, v, fullArgs)
 	case "del":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleDel(client, v)
 	case "tagall":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleTags(client, v, false, fullArgs)
 	case "hidetag":
-		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner && !isGroupAdmin(client, v) { react(client, v, "❌"); return }
 		go handleTags(client, v, true, fullArgs)
 
 	// 🛠️ UTILITY COMMANDS (Publicly Available)
 	case "vv":
-		react(client, v.Info.Chat, v.Info.ID, "👀")
+		react(client, v, "👀")
 		go handleVV(client, v)
 		
 	// 🎨 EDITING ZONE COMMANDS
 	case "s", "sticker":
-		react(client, v.Info.Chat, v.Info.ID, "🎨")
+		react(client, v, "🎨")
 		go handleSticker(client, v)
 
 	case "toimg":
-		react(client, v.Info.Chat, v.Info.ID, "🖼️")
+		react(client, v, "🖼️")
 		go handleToImg(client, v)
 
 	case "tovideo":
-		react(client, v.Info.Chat, v.Info.ID, "📽️")
+		react(client, v, "📽️")
 		go handleToVideo(client, v, false)
 
 	case "togif":
-		react(client, v.Info.Chat, v.Info.ID, "👾")
+		react(client, v, "👾")
 		go handleToVideo(client, v, true)
 
 	case "tourl":
-		react(client, v.Info.Chat, v.Info.ID, "🌐")
+		react(client, v, "🌐")
 		go handleToUrl(client, v)
 
 	case "toptt":
-		react(client, v.Info.Chat, v.Info.ID, "🎙️")
+		react(client, v, "🎙️")
 		go handleToPTT(client, v, fullArgs)
 
 	case "fancy":
-		react(client, v.Info.Chat, v.Info.ID, "✨")
+		react(client, v, "✨")
 		go handleFancy(client, v, fullArgs)
 		
 	case "music":
-		react(client, v.Info.Chat, v.Info.ID, "🎧")
+		react(client, v, "🎧")
 		go handleMusicMixer(client, v, fullArgs)
 		
 			// 📂 DATABASE & NUMBER TOOLS
 	case "chk", "check":
-		react(client, v.Info.Chat, v.Info.ID, "⏳")
+		react(client, v, "⏳")
 		go handleNumberChecker(client, v)
 		
 	// 🧪 TESTING ZONE
 	case "test":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "🧪")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "🧪")
 		go handleCleanChannel(client, v, fullArgs) // 👈 یہاں fullArgs ایڈ کر دیا ہے
 		
 		
 	case "id":
-		react(client, v.Info.Chat, v.Info.ID, "🪪")
+		react(client, v, "🪪")
 		go handleID(client, v)
 		
    	// ✨ AI TOOLS COMMANDS
 	case "img", "image":
-		react(client, v.Info.Chat, v.Info.ID, "🎨")
+		react(client, v, "🎨")
 		go handleImageGen(client, v, fullArgs)
 
 	case "tr", "translate":
-		react(client, v.Info.Chat, v.Info.ID, "🔄")
+		react(client, v, "🔄")
 		go handleTranslate(client, v, fullArgs)
 
 	case "ss", "screenshot":
-		react(client, v.Info.Chat, v.Info.ID, "📸")
+		react(client, v, "📸")
 		go handleScreenshot(client, v, fullArgs)
 
 	case "weather":
-		react(client, v.Info.Chat, v.Info.ID, "🌤️")
+		react(client, v, "🌤️")
 		go handleWeather(client, v, fullArgs)
 
 	case "google", "search":
-		react(client, v.Info.Chat, v.Info.ID, "🔍")
+		react(client, v, "🔍")
 		go handleGoogle(client, v, fullArgs)
     
     // 👁️ OWNER COMMANDS
 	case "antivv":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner { react(client, v, "❌"); return }
 		go handleAntiVVToggle(client, v, fullArgs)    
                 
     // 🛡️ OWNER COMMANDS
 	case "antidelete":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		if !userIsOwner { react(client, v, "❌"); return }
 		go handleAntiDeleteToggle(client, v, fullArgs)
     
 	case "remini", "removebg":
-		react(client, v.Info.Chat, v.Info.ID, "⏳")
+		react(client, v, "⏳")
 		replyMessage(client, v, "⚠️ *Premium Feature:*\nThis feature requires a dedicated API Key. It will be unlocked in the next update by Silent Hackers!")
 		
     case "rvc", "vc":
-		react(client, v.Info.Chat, v.Info.ID, "🎙️")
+		react(client, v, "🎙️")
 		go handleRVC(client, v)
 		
 	// 🚫 SECURITY COMMANDS
 	case "anticall":
-        if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+        if !userIsOwner { react(client, v, "❌"); return }
         go handleToggleSettings(client, v, "anti_call", fullArgs)
 
     case "antidm":
-        if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+        if !userIsOwner { react(client, v, "❌"); return }
         go handleToggleSettings(client, v, "anti_dm", fullArgs)
         
       	// 🚫 SECURITY COMMANDS
 	case "antichat":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "🧹")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "🧹")
 		// Make sure your bot_settings table has an 'anti_chat' column (boolean)
 		go handleToggleSettings(client, v, "anti_chat", fullArgs)
 		
 			
 	case "fb", "facebook", "ig", "insta", "instagram", "tw", "x", "twitter", "pin", "pinterest", "threads", "snap", "snapchat", "reddit", "dm", "dailymotion", "vimeo", "rumble", "bilibili", "douyin", "kwai", "bitchute", "sc", "soundcloud", "spotify", "apple", "applemusic", "deezer", "tidal", "mixcloud", "napster", "bandcamp", "imgur", "giphy", "flickr", "9gag", "ifunny":
-		react(client, v.Info.Chat, v.Info.ID, "🪩")
+		react(client, v, "🪩")
 		// fullArgs کی جگہ rawArgs اور cmd کی جگہ command آ گیا ہے
 		go handleUniversalDownload(client, v, rawArgs, command)
 
 	case "tt", "tiktok":
-		react(client, v.Info.Chat, v.Info.ID, "📱")
+		react(client, v, "📱")
 		// fullArgs کی جگہ rawArgs (جس میں اوریجنل کیپیٹل لیٹرز محفوظ ہیں)
 		go handleTikTok(client, v, rawArgs)
 
 	case "yt", "youtube":
-		react(client, v.Info.Chat, v.Info.ID, "🎬")
+		react(client, v, "🎬")
 		// fullArgs کی جگہ rawArgs
 		go handleYTDirect(client, v, rawArgs)
 
     	// ⏰ SCHEDULE SEND COMMAND (VIP ZONE)
 	case "send", "schedule":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "⏳")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "⏳")
 		go handleScheduleSend(client, v, fullArgs)
 		
 		// 🕵️ REVERSE ENGINEERING COMMAND
 	case "getlogs":
-		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
-		react(client, v.Info.Chat, v.Info.ID, "📂")
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "📂")
 		go handleGetLogs(client, v)
 		
 		
 	// 🔥 THE AI MASTERMINDS
 	case "ai", "gpt", "chatgpt", "gemini", "claude", "llama", "groq", "bot", "ask":
-	    react(client, v.Info.Chat, v.Info.ID, "🧠")
+	    react(client, v, "🧠")
 		go handleAICommand(client, v, fullArgs, cmd)
 	}
 }
@@ -903,7 +903,7 @@ func handlePair(client *whatsmeow.Client, v *events.Message, args string) {
 	phone = strings.ReplaceAll(phone, " ", "")
 	phone = strings.ReplaceAll(phone, "-", "")
 
-	react(client, v.Info.Chat, v.Info.ID, "⏳")
+	react(client, v, "⏳")
 	replyMessage(client, v, "⏳ Generating pairing code... Please wait.")
 
 	// 2. نیا ڈیوائس اسٹور بنائیں (main.go والا dbContainer یوز ہو رہا ہے)
@@ -922,7 +922,7 @@ func handlePair(client *whatsmeow.Client, v *events.Message, args string) {
 	err := newClient.Connect()
 	if err != nil {
 		replyMessage(client, v, "❌ Failed to connect to WhatsApp servers.")
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 
@@ -930,7 +930,7 @@ func handlePair(client *whatsmeow.Client, v *events.Message, args string) {
 	code, err := newClient.PairPhone(context.Background(), phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
 	if err != nil {
 		replyMessage(client, v, fmt.Sprintf("❌ Failed to get pairing code: %v", err))
-		react(client, v.Info.Chat, v.Info.ID, "❌")
+		react(client, v, "❌")
 		return
 	}
 
@@ -947,7 +947,7 @@ func handlePair(client *whatsmeow.Client, v *events.Message, args string) {
 	// 8. دوسرا میسج: صرف پیئرنگ کوڈ (ڈائریکٹ کاپی کرنے کے لیے)
 	replyMessage(client, v, formattedCode)
 	
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 }
 
 // ==========================================
