@@ -1406,37 +1406,21 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
+
 // ==========================================
-// 🧪 COMMAND: .test (Ultimate Bypass Tester V6 - E2E Renderer Edition)
+// 🧪 COMMAND: .test (Link Preview & View Channel Card Enforcer)
 // ==========================================
 func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *INITIALIZING THE E2E RENDERER ARSENAL (V6)...*\n\n_Using strictly waE2E FutureProof wrappers to force client-side rendering._ 🚀")
+	replyMessage(client, v, "⏳ *INITIALIZING PREVIEW MODE TESTER...*\n\n_Dead button methods removed. Forcing Link Preview Mode (View Channel Card) for spoofing and read-more methods..._ 🚀")
 	
 	targetJID := v.Info.Chat
 	testLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
-	channelName := "Silent Hackers"
 	
+	// ReadMore String Generator
 	readMore := ""
 	for i := 0; i < 150; i++ {
 		readMore += "\u200E\u200F"
 	}
-
-	// 🛠️ BUTTON PARAMETERS (JSON FORMAT)
-	urlParams := map[string]interface{}{
-		"display_text":  "Join Channel",
-		"url":           testLink,
-		"merchant_url":  testLink,
-		"id":            "url_btn_1",
-	}
-	urlParamsJSON, _ := json.Marshal(urlParams)
-
-	copyParams := map[string]string{
-		"display_text": "Copy Code",
-		"copy_code":    "SILENT_VIP",
-		"id":           "copy_btn_1",
-	}
-	copyParamsJSON, _ := json.Marshal(copyParams)
-
 
 	// 🛠️ METHODS DEFINITION
 	type payloadTest struct {
@@ -1445,149 +1429,33 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 	}
 
 	tests := []payloadTest{
-		// 🚀 METHOD 1: Wrapper URL Button
+		// 🚀 METHOD 1: Link Spoofing (Preview Mode)
 		{
-			MethodName: "Method 1: Wrapper URL Button (FutureProof)",
-			Message: &waE2E.Message{
-				ViewOnceMessage: &waE2E.FutureProofMessage{
-					Message: &waE2E.Message{
-						InteractiveMessage: &waE2E.InteractiveMessage{
-							Header: &waE2E.InteractiveMessage_Header{
-								Title:              proto.String("🧪 Wrapper URL Test"),
-								Subtitle:           proto.String(channelName),
-								HasMediaAttachment: proto.Bool(false),
-							},
-							Body: &waE2E.InteractiveMessage_Body{
-								Text: proto.String("یہ بٹن موبائل ایپ کو زبردستی رینڈر کرنے پر مجبور کرتا ہے۔"),
-							},
-							Footer: &waE2E.InteractiveMessage_Footer{
-								Text: proto.String("Powered by Arslan"),
-							},
-							InteractiveMessage: &waE2E.InteractiveMessage_NativeFlowMessage_{
-								NativeFlowMessage: &waE2E.InteractiveMessage_NativeFlowMessage{
-									Buttons: []*waE2E.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
-										{
-											Name:             proto.String("cta_url"),
-											ButtonParamsJSON: proto.String(string(urlParamsJSON)),
-										},
-									},
-									MessageParamsJSON: proto.String(`{"name":"galaxy_message"}`),
-									MessageVersion:    proto.Int32(1),
-								},
-							},
-							ContextInfo: &waE2E.ContextInfo{
-								IsForwarded: proto.Bool(true),
-								ForwardedNewsletterMessageInfo: &waE2E.ContextInfo_ForwardedNewsletterMessageInfo{
-									NewsletterJID:   proto.String("120363421646654726@newsletter"),
-									ServerMessageID: proto.Int32(100),
-									NewsletterName:  proto.String(channelName),
-								},
-							},
-						},
-					},
-				},
-				MessageContextInfo: &waE2E.MessageContextInfo{
-					DeviceListMetadata: &waE2E.DeviceListMetadata{
-						RecipientKeyHash:    []byte{},
-						RecipientTimestamp:  proto.Uint64(uint64(time.Now().Unix())),
-						// 🔥 FIX: RecipientKeyIndexes has been permanently removed by WhatsApp!
-					},
-					DeviceListMetadataVersion: proto.Int32(2),
-				},
-			},
-		},
-		// 🚀 METHOD 2: Wrapper Copy Button
-		{
-			MethodName: "Method 2: Wrapper Copy Button",
-			Message: &waE2E.Message{
-				ViewOnceMessage: &waE2E.FutureProofMessage{
-					Message: &waE2E.Message{
-						InteractiveMessage: &waE2E.InteractiveMessage{
-							Header: &waE2E.InteractiveMessage_Header{
-								Title:              proto.String("🧪 Wrapper Copy Test"),
-								HasMediaAttachment: proto.Bool(false),
-							},
-							Body: &waE2E.InteractiveMessage_Body{
-								Text: proto.String("کاپی بٹن ٹیسٹ۔ اس پر کلک کرنے سے کوڈ کاپی ہونا چاہیے۔"),
-							},
-							InteractiveMessage: &waE2E.InteractiveMessage_NativeFlowMessage_{
-								NativeFlowMessage: &waE2E.InteractiveMessage_NativeFlowMessage{
-									Buttons: []*waE2E.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
-										{
-											Name:             proto.String("cta_copy"),
-											ButtonParamsJSON: proto.String(string(copyParamsJSON)),
-										},
-									},
-									MessageParamsJSON: proto.String(`{"name":"galaxy_message"}`),
-									MessageVersion:    proto.Int32(1),
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		// 🚀 METHOD 3: The Carousel Cards Wrapper
-		{
-			MethodName: "Method 3: Wrapper Carousel Cards",
-			Message: &waE2E.Message{
-				ViewOnceMessage: &waE2E.FutureProofMessage{
-					Message: &waE2E.Message{
-						InteractiveMessage: &waE2E.InteractiveMessage{
-							Body: &waE2E.InteractiveMessage_Body{
-								Text: proto.String("🧪 Carousel Wrapper\nاسے سوائپ (Swipe) کریں۔"),
-							},
-							Footer: &waE2E.InteractiveMessage_Footer{
-								Text: proto.String("Silent Hackers"),
-							},
-							InteractiveMessage: &waE2E.InteractiveMessage_CarouselMessage_{
-								CarouselMessage: &waE2E.InteractiveMessage_CarouselMessage{
-									Cards: []*waE2E.InteractiveMessage{
-										{
-											Header: &waE2E.InteractiveMessage_Header{
-												Title: proto.String("Card 1"),
-												HasMediaAttachment: proto.Bool(false),
-											},
-											Body: &waE2E.InteractiveMessage_Body{
-												Text: proto.String("Join Channel inside."),
-											},
-											InteractiveMessage: &waE2E.InteractiveMessage_NativeFlowMessage_{
-												NativeFlowMessage: &waE2E.InteractiveMessage_NativeFlowMessage{
-													Buttons: []*waE2E.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
-														{
-															Name:             proto.String("cta_url"),
-															ButtonParamsJSON: proto.String(string(urlParamsJSON)),
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		// 🚀 METHOD 4: Extended Text (Link Spoofing)
-		{
-			MethodName: "Method 4: Link Spoofing",
+			MethodName: "Method 1: Link Spoofing (Preview Mode)",
 			Message: &waE2E.Message{
 				ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-					Text:        proto.String("🧪 M4: Link Spoofing\nبیک گراؤنڈ میں میٹا ڈیٹا میں لنک ہے۔"),
-					MatchedText: proto.String(testLink),
-					Title:       proto.String("Silent Hackers Channel"),
-					Description: proto.String("Click to open"),
+					// 🔥 اس ٹیکسٹ میں کوئی لنک نہیں ہے
+					Text:         proto.String("✨ *VIP OTP ALERT* ✨\n\nاس میسج کے ٹیکسٹ میں کوئی لنک نہیں ہے، لیکن ہم نے میٹا ڈیٹا کے ذریعے پریویو (Preview) فورس کیا ہے تاکہ نیچے 'View Channel' کا کارڈ آئے۔"),
+					// 🔥 یہ وہ فیلڈز ہیں جو پریویو کارڈ بناتی ہیں
+					MatchedText:  proto.String(testLink),
+					CanonicalUrl: proto.String(testLink), // 👈 اس کا صحیح نام CanonicalUrl ہے
+					Title:        proto.String("Silent Hackers VIP"),
+					Description:  proto.String("Official Channel"),
 				},
 			},
 		},
-		// 🚀 METHOD 5: Read More Glitch
+		// 🚀 METHOD 2: Read More Glitch (Preview Mode)
 		{
-			MethodName: "Method 5: Read More Glitch",
+			MethodName: "Method 2: Read More Glitch (Preview Mode)",
 			Message: &waE2E.Message{
 				ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-					Text: proto.String(fmt.Sprintf("🧪 M5: Read More Glitch\nہمیشہ کام کرنے والا میتھڈ۔%s\n%s", readMore, testLink)),
+					// 🔥 ٹیکسٹ، ریڈ مور کریکٹرز اور آخر میں لنک
+					Text:         proto.String(fmt.Sprintf("✨ *VIP OTP ALERT* ✨\nیہ ریڈ مور (Read More) والا میتھڈ ہے۔%s\n%s", readMore, testLink)),
+					// 🔥 اور یہاں پھر سے پریویو کا میٹا ڈیٹا
+					MatchedText:  proto.String(testLink),
+					CanonicalUrl: proto.String(testLink),
+					Title:        proto.String("Silent Hackers VIP"),
+					Description:  proto.String("Join us today!"),
 				},
 			},
 		},
@@ -1614,8 +1482,8 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		}
 
 		// Anti-Spam Delay
-		time.Sleep(4 * time.Second)
+		time.Sleep(3 * time.Second)
 	}
 
-	replyMessage(client, v, "✅ *RENDERER TESTING COMPLETED!*\n_Check your WhatsApp chat!_")
+	replyMessage(client, v, "✅ *PREVIEW TESTING COMPLETED!*\n_Check your WhatsApp. The channel links should now render as a Preview Card at the bottom of the message._")
 }
