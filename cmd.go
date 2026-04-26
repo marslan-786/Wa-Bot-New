@@ -1408,19 +1408,11 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
-// ==========================================
-// 🧹 COMMAND: .cleanchannel (The Ultimate Sweeper + RAW Error Dumper)
-// ==========================================
-// ==========================================
-// 🧹 COMMAND: .cleanchannel (The Ultimate Final Sweeper)
-// ==========================================
 func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string) {
 	if args == "" {
 		replyMessage(client, v, "❌ *Error:* چینل کی آئی ڈی دو!\nمثال: `.cleanchannel 123456789`")
 		return
 	}
-
-	replyMessage(client, v, "⏳ *Phase 1: Scanning...*\nمیسجز کی لسٹ بنا رہا ہوں، ذرا صبر کرو...")
 
 	cleanID := strings.TrimSpace(args)
 	if !strings.Contains(cleanID, "@newsletter") {
@@ -1428,73 +1420,78 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 	}
 	targetJID, _ := types.ParseJID(cleanID)
 
-	// 🚀 اب ہم اصلی MessageID (لمبی سٹرنگ) سیو کریں گے
-	var messageIDs []types.MessageID
-	var lastMsgID types.MessageServerID = 0
-	seen := make(map[types.MessageServerID]bool)
+	replyMessage(client, v, "⏳ *Cleanup Started...*\nمیں 50-50 میسجز کے بیچ (batch) منگوا کر ڈیلیٹ کر رہا ہوں۔ بوٹ بیک گراؤنڈ میں کام کر رہا ہے، جب ختم ہوگا تو بتا دوں گا! 🚀")
 
-	// 1. Fetching Loop (ڈپلیکیٹ فلٹر کے ساتھ)
-	for {
-		msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{
-			Count:  50,
-			Before: lastMsgID,
-		})
-		
-		if err != nil || len(msgs) == 0 { break }
-
-		addedNew := false
-		for _, msg := range msgs {
-			if !seen[msg.MessageServerID] {
-				seen[msg.MessageServerID] = true
-				
-				// 🎯 جادو یہاں ہے! ہم سیدھا MessageID نکال کر لسٹ میں ڈال رہے ہیں
-				messageIDs = append(messageIDs, msg.MessageID) 
-				addedNew = true
-			}
-		}
-		
-		if !addedNew { break }
-
-		lastMsgID = msgs[len(msgs)-1].MessageServerID
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	total := len(messageIDs)
-	if total == 0 {
-		replyMessage(client, v, "✅ کوئی نیا میسج نہیں ملا۔ چینل صاف ہے۔")
-		return
-	}
-
-	replyMessage(client, v, fmt.Sprintf("⚠️ *Phase 2: Deleting %d Messages!*\n\nاصلی ID کے ساتھ صفایا شروع ہو رہا ہے! 🚀", total))
-
-	// 2. Deletion Loop (Real ID + Anti-Ban)
+	// پورے پروسیس کو بیک گراؤنڈ میں ڈال دیا تاکہ بوٹ پھنسے نہ
 	go func() {
-		deletedCount := 0
+		var lastMsgID types.MessageServerID = 0
+		seen := make(map[types.MessageServerID]bool)
+		
+		totalDeleted := 0
+		totalFetched := 0
 		var firstError string
 
-		for i, msgID := range messageIDs {
-			// اب ہم واٹس ایپ کو اس کی اصلی والی آئی ڈی دے رہے ہیں
-			revokeMsg := client.BuildRevoke(targetJID, types.EmptyJID, msgID)
-			_, err := client.SendMessage(context.Background(), targetJID, revokeMsg)
+		for {
+			// 1. 50 میسجز کی لسٹ منگواؤ
+			msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{
+				Count:  50,
+				Before: lastMsgID,
+			})
 			
-			if err == nil {
-				deletedCount++
-			} else if firstError == "" {
-				firstError = err.Error()
-				// اگر اب بھی کوئی ایرر آیا تو چیٹ میں بتائے گا
-				errorMsg := fmt.Sprintf("❌ *Error on ID %s:* %v", msgID, err)
-				replyMessage(client, v, errorMsg)
+			// اگر کوئی ایرر آئے یا مزید کوئی میسج نہ ملے تو لوپ بریک کر دو
+			if err != nil || len(msgs) == 0 {
+				break
 			}
 
-			// 🛡️ ANTI-BAN LOGIC
-			if (i + 1) % 20 == 0 {
-				time.Sleep(3 * time.Second) // 20 کے بعد تھوڑی لمبی سانس
-			} else {
-				time.Sleep(300 * time.Millisecond) // ورنہ نارمل سپیڈ
+			addedNew := false
+
+			// 2. جو 50 (یا اس سے کم) میسجز ملے ہیں، ان کو ایک ایک کر کے اڑاؤ
+			for i, msg := range msgs {
+				// ڈپلیکیٹ چیک
+				if !seen[msg.MessageServerID] {
+					seen[msg.MessageServerID] = true
+					addedNew = true
+					totalFetched++
+
+					// میسج ڈیلیٹ کرنے کی ریکویسٹ
+					revokeMsg := client.BuildRevoke(targetJID, types.EmptyJID, msg.MessageID)
+					_, err := client.SendMessage(context.Background(), targetJID, revokeMsg)
+					
+					if err == nil {
+						totalDeleted++
+					} else if firstError == "" {
+						firstError = err.Error()
+						errorMsg := fmt.Sprintf("❌ *Error on ID %s:* %v", msg.MessageID, err)
+						replyMessage(client, v, errorMsg)
+					}
+
+					// 🛡️ ANTI-BAN LOGIC (ڈیلیٹ کرتے وقت تھوڑا وقفہ)
+					if totalDeleted > 0 && totalDeleted%20 == 0 {
+						time.Sleep(3 * time.Second) // 20 میسجز اڑانے کے بعد لمبا سانس
+					} else {
+						time.Sleep(300 * time.Millisecond) // ورنہ نارمل سپیڈ
+					}
+				}
 			}
+
+			// اگر اس بیچ (batch) میں کوئی نیا میسج نہیں ملا، تو مطلب سب ختم
+			if !addedNew {
+				break
+			}
+
+			// اگلے بیچ کے لیے lastMsgID کو اپڈیٹ کرو
+			lastMsgID = msgs[len(msgs)-1].MessageServerID
+			
+			// واٹس ایپ سرور پر لوڈ نہ پڑے، اس لیے اگلی 50 کی لسٹ منگوانے سے پہلے 1 سیکنڈ کا وقفہ
+			time.Sleep(1 * time.Second) 
 		}
 
-		finalMsg := fmt.Sprintf("✅ *CLEANUP COMPLETE!*\n\nمیں نے %d میں سے %d میسجز کامیابی سے اڑا دیے ہیں! 🚀", total, deletedCount)
-		replyMessage(client, v, finalMsg)
+		// 3. فائنل رپورٹ
+		if totalFetched == 0 {
+			replyMessage(client, v, "✅ کوئی نیا میسج نہیں ملا۔ چینل پہلے سے ہی صاف ہے۔")
+		} else {
+			finalMsg := fmt.Sprintf("✅ *CLEANUP COMPLETE!*\n\nمیں نے %d میسجز سکین کیے اور ان میں سے %d کامیابی سے اڑا دیے ہیں! 🚀", totalFetched, totalDeleted)
+			replyMessage(client, v, finalMsg)
+		}
 	}()
 }
