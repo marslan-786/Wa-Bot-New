@@ -1438,14 +1438,12 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 				Before: lastMsgID,
 			})
 			
-			// اگر کوئی ایرر آئے یا مزید کوئی میسج نہ ملے تو لوپ بریک کر دو
 			if err != nil || len(msgs) == 0 {
 				break
 			}
 
 			addedNew := false
 
-			// 2. جو 50 (یا اس سے کم) میسجز ملے ہیں، ان کو ایک ایک کر کے اڑاؤ
 			for _, msg := range msgs {
 
 				// ڈپلیکیٹ چیک
