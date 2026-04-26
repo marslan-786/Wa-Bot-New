@@ -21,6 +21,7 @@ import (
 	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/proto/waCommon"
 //	"google.golang.org/protobuf/encoding/protojson"
+    "waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 )
 
 // ==========================================
