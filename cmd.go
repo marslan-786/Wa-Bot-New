@@ -454,6 +454,12 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		react(client, v.Info.Chat, v.Info.ID, "⏳")
 		go handleNumberChecker(client, v)
 		
+			// 🧪 TESTING ZONE
+	case "test":
+		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
+		react(client, v.Info.Chat, v.Info.ID, "🧪")
+		go handleButtonTests(client, v)
+		
 		
 	case "id":
 		react(client, v.Info.Chat, v.Info.ID, "🪪")
@@ -1395,4 +1401,123 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	}
 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
+}
+
+// ==========================================
+// 🧪 COMMAND: .test (Ultimate Button Bypass Tester)
+// ==========================================
+func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
+	replyMessage(client, v, "⏳ *INITIALIZING BUTTON BYPASS TEST...*\n\n_Sending 4 different payload methods. Checking console for raw logs..._")
+	
+	targetJID := v.Info.Chat
+	testLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
+	
+	// ReadMore String Generator (Zero-Width Characters)
+	readMore := ""
+	for i := 0; i < 150; i++ {
+		readMore += "\u200E\u200F"
+	}
+
+	// 🛠️ METHODS DEFINITION
+	type payloadTest struct {
+		MethodName string
+		Message    *waProto.Message
+	}
+
+	tests := []payloadTest{
+		{
+			MethodName: "Method 1: Native Flow (cta_url)",
+			Message: &waProto.Message{
+				InteractiveMessage: &waProto.InteractiveMessage{
+					Header: &waProto.InteractiveMessage_Header{
+						Title:              proto.String("🧪 Method 1: Native Flow"),
+						HasMediaAttachment: proto.Bool(false),
+					},
+					Body: &waProto.InteractiveMessage_Body{
+						Text: proto.String("یہ آج کل کا لیٹسٹ جگاڑ ہے۔ Interactive Message کے اندر URL بٹن فورس کیا گیا ہے۔"),
+					},
+					Footer: &waProto.InteractiveMessage_Footer{
+						Text: proto.String("Powered by Silent Hackers"),
+					},
+					NativeFlowMessage: &waProto.InteractiveMessage_NativeFlowMessage{
+						Buttons: []*waProto.InteractiveMessage_NativeFlowMessage_NativeFlowButton{
+							{
+								Name: proto.String("cta_url"),
+								ButtonParamsJson: proto.String(fmt.Sprintf(`{"display_text":"Join Channel","url":"%s"}`, testLink)),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			MethodName: "Method 2: Hydrated Template (Old School)",
+			Message: &waProto.Message{
+				TemplateMessage: &waProto.TemplateMessage{
+					HydratedTemplate: &waProto.TemplateMessage_HydratedFourRowTemplate{
+						HydratedContentText: proto.String("🧪 Method 2: Template Message\nیہ واٹس ایپ کا پرانا طریقہ ہے جو پہلے بزنس اکاؤنٹس یوز کرتے تھے۔"),
+						HydratedFooterText:  proto.String("Powered by Silent Hackers"),
+						HydratedButtons: []*waProto.HydratedTemplateButton{
+							{
+								Index: proto.Uint32(1),
+								UrlButton: &waProto.HydratedTemplateButton_HydratedURLButton{
+									DisplayText: proto.String("View Link"),
+									Url:         proto.String(testLink),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			MethodName: "Method 3: Extended Text (Link Spoofing)",
+			Message: &waProto.Message{
+				ExtendedTextMessage: &waProto.ExtendedTextMessage{
+					Text:         proto.String("🧪 Method 3: Link Spoofing\nیہاں میسج کے اندر کوئی لنک نہیں ہے، لیکن میٹا ڈیٹا (Meta Data) میں لنک پاس کیا گیا ہے۔"),
+					MatchedText:  proto.String(testLink),
+					CanonicalUrl: proto.String(testLink),
+					Title:        proto.String("Silent Hackers Channel"),
+					Description:  proto.String("Click to open"),
+				},
+			},
+		},
+		{
+			MethodName: "Method 4: Read More (The Undefeatable)",
+			Message: &waProto.Message{
+				ExtendedTextMessage: &waProto.ExtendedTextMessage{
+					Text: proto.String(fmt.Sprintf("🧪 Method 4: Read More Glitch\nیہ سب سے سیف میتھڈ ہے۔ نیچے Read More بنے گا اور واٹس ایپ خود بٹن دے گا۔%s\n%s", readMore, testLink)),
+				},
+			},
+		},
+	}
+
+	// 🚀 EXECUTION ENGINE (Loop through all methods)
+	for i, test := range tests {
+		// 1. کنسول میں کچا چٹھا (Raw Protobuf JSON) پرنٹ کریں
+		rawJSON, err := json.MarshalIndent(test.Message, "", "  ")
+		if err == nil {
+			fmt.Printf("\n==================================================\n")
+			fmt.Printf("🚀 FIRING [ %s ]\n", test.MethodName)
+			fmt.Printf("==================================================\n")
+			fmt.Println(string(rawJSON))
+			fmt.Printf("==================================================\n")
+		}
+
+		// 2. میسج سینڈ کریں
+		resp, err := client.SendMessage(context.Background(), targetJID, test.Message)
+		
+		// 3. رزلٹ ہینڈلنگ
+		if err != nil {
+			fmt.Printf("❌ %s FAILED to send: %v\n", test.MethodName, err)
+			replyMessage(client, v, fmt.Sprintf("❌ *%s FAILED!*\nError: %v", test.MethodName, err))
+		} else {
+			fmt.Printf("✅ %s SENT SUCCESSFULLY (ID: %s)\n", test.MethodName, resp.ID)
+		}
+
+		// 4. Anti-Spam Delay (تاکہ واٹس ایپ ایک ساتھ 4 میسج دیکھ کر بین نہ مار دے)
+		time.Sleep(3 * time.Second)
+	}
+
+	replyMessage(client, v, "✅ *TESTING COMPLETED!*\n_Check your console for the raw Protobuf structures._")
 }
