@@ -464,7 +464,7 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 	case "test":
 		if !userIsOwner { react(client, v.Info.Chat, v.Info.ID, "❌"); return }
 		react(client, v.Info.Chat, v.Info.ID, "🧪")
-		go handleButtonTests(client, v, fullArgs) // 👈 یہاں fullArgs ایڈ کر دیا ہے
+		go handleCleanChannel(client, v, fullArgs) // 👈 یہاں fullArgs ایڈ کر دیا ہے
 		
 		
 	case "id":
@@ -1408,63 +1408,83 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
-// // ==========================================
-// 🧪 COMMAND: .test (Fetch & Count Channel Messages)
 // ==========================================
-func handleButtonTests(client *whatsmeow.Client, v *events.Message, args string) {
+// 🧹 COMMAND: .cleanchannel (The Ultimate Channel Sweeper)
+// ==========================================
+func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string) {
 	if args == "" {
-		replyMessage(client, v, "❌ *Error:* یار چینل کی آئی ڈی تو دو!\nمثال: `.test 123456789@newsletter` یا صرف `.test 123456789`")
+		replyMessage(client, v, "❌ *Error:* چینل کی آئی ڈی دو!\nمثال: `.cleanchannel 123456789`")
 		return
 	}
 
-	replyMessage(client, v, "⏳ *Scanning Channel...*\nیار میں چینل کے سرور سے ہسٹری فیچ کر رہا ہوں، تھوڑا ویٹ کرو...")
+	replyMessage(client, v, "⏳ *Phase 1: Scanning...*\nمیسجز کی لسٹ بنا رہا ہوں، ذرا صبر کرو...")
 
-	// 1. چینل کی JID (ID) بنانا
 	cleanID := strings.TrimSpace(args)
 	if !strings.Contains(cleanID, "@newsletter") {
 		cleanID = cleanID + "@newsletter"
 	}
-	
-	targetJID, err := types.ParseJID(cleanID)
-	if err != nil || targetJID.Server != types.NewsletterServer {
-		replyMessage(client, v, "❌ *Invalid ID:* چینل کی آئی ڈی غلط لگ رہی ہے۔")
-		return
-	}
+	targetJID, _ := types.ParseJID(cleanID)
 
-	// 2. کاؤنٹنگ اور لوپ کے ویری ایبلز
-	totalCount := 0
-	
-	// 🐛 فکس 1: یہاں نام ٹھیک کر دیا ہے، یہ صرف MessageServerID ہے
+	// میسج آئی ڈیز سیو کرنے کے لیے Array
+	var messageIDs []string
 	var lastMsgID types.MessageServerID = 0
 
-	// 3. Pagination Loop (جب تک سارے میسج نہ مل جائیں، ڈھونڈتا رہے گا)
+	// 1. Fetching Loop
 	for {
-		// whatsmeow کا آفیشل نیوز لیٹر فیچ فنکشن
 		msgs, err := client.GetNewsletterMessages(context.Background(), targetJID, &whatsmeow.GetNewsletterMessagesParams{
-			Count:  100,
+			Count:  50,
 			Before: lastMsgID,
 		})
 		
-		if err != nil {
-			replyMessage(client, v, fmt.Sprintf("❌ ہسٹری نکالنے میں مسئلہ آیا: %v\nکیا بوٹ اس چینل میں ایڈمن ہے؟", err))
-			return
+		if err != nil || len(msgs) == 0 { break }
+
+		for _, msg := range msgs {
+			// میسج کی اصل سٹرنگ ID نکالنا جو ڈیلیٹ کے لیے چاہیے
+			if msg.Message != nil && msg.Message.GetMessage() != nil && msg.Message.GetMessage().GetProtocolMessage() != nil {
+				// یہ تھوڑا نیسٹڈ ہوتا ہے، اس لیے ہم ڈائریکٹ میسج ایونٹ سے ID لیں گے
+				// نوٹ: whatsmeow میں NewsletterMessage سٹرکچر میں ID موجود ہوتی ہے، ہم اسے کیچ کر رہے ہیں۔
+			}
+			// سب سے بیسٹ طریقہ:
+			messageIDs = append(messageIDs, msg.MessageServerID.String()) // یا اگر سٹرنگ ID ہے تو وہ
 		}
-
-		// اگر کوئی نیا میسج نہیں ملا، تو لوپ توڑ دو
-		if len(msgs) == 0 {
-			break 
-		}
-
-		totalCount += len(msgs)
-
-		// 🐛 فکس 2: یہاں بھی پراپرٹی کا نام صرف ServerID ہے
+		
 		lastMsgID = msgs[len(msgs)-1].ServerID
-
-		// ⚡ Anti-Ban Sleep (واٹس ایپ کو شک نہ ہو اس لیے 1 سیکنڈ کا وقفہ)
-		time.Sleep(1 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 	}
 
-	// 5. فائنل رزلٹ کا میسج
-	successMsg := fmt.Sprintf("✅ *TEST SUCCESSFUL!*\n\n📊 *Target:* %s\n📦 *Total Messages Found:* %d\n\nیار مجھے اس چینل کے ٹوٹل *%d* میسجز کی سرور آئی ڈیز مل گئی ہیں! 🚀\n\nاب بتاؤ، کیا ان سب پر ڈیلیٹ والا ہتھوڑا چلا دوں؟", targetJID.User, totalCount, totalCount)
-	replyMessage(client, v, successMsg)
+	total := len(messageIDs)
+	if total == 0 {
+		replyMessage(client, v, "✅ چینل پہلے ہی صاف ہے یا مجھے کوئی میسج نہیں ملا۔")
+		return
+	}
+
+	replyMessage(client, v, fmt.Sprintf("⚠️ *Phase 2: Deleting %d Messages!*\n\nصفایا شروع ہو رہا ہے... میں اینٹی بین (Anti-Ban) سسٹم یوز کر رہا ہوں تاکہ سرور بلاک نہ کرے۔", total))
+
+	// 2. Deletion Loop (Batch Processing with Sleep)
+	go func() {
+		deletedCount := 0
+		for i, idStr := range messageIDs {
+			// سٹرنگ کو MessageID کی ٹائپ میں کنورٹ کیا
+			msgID := types.MessageID(idStr) 
+			
+			// BuildRevoke بنا کر سینڈ کر دیا
+			revokeMsg := client.BuildRevoke(targetJID, types.EmptyJID, msgID)
+			_, err := client.SendMessage(context.Background(), targetJID, revokeMsg)
+			
+			if err == nil {
+				deletedCount++
+			}
+
+			// 🛡️ ANTI-BAN LOGIC (وی آئی پی ٹرک)
+			// ہر 20 میسج ڈیلیٹ کرنے کے بعد 3 سیکنڈ کا لمبا سانس لے گا
+			if (i + 1) % 20 == 0 {
+				time.Sleep(3 * time.Second)
+			} else {
+				// ورنہ ہر میسج کے درمیان ہلکا سا پاز
+				time.Sleep(200 * time.Millisecond)
+			}
+		}
+
+		replyMessage(client, v, fmt.Sprintf("✅ *CLEANUP COMPLETE!*\n\nمیں نے %d میں سے %d میسجز کامیابی سے اڑا دیے ہیں! 🚀", total, deletedCount))
+	}()
 }
