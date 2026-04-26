@@ -10,7 +10,10 @@ import (
 	"sync"
 	"encoding/json"
 //	"encoding/base64"
-//    "bytes"
+    "bytes"
+    "image"
+	"image/jpeg"
+	_ "image/png"
 
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
@@ -1406,65 +1409,98 @@ func uploadAndSendTxt(client *whatsmeow.Client, v *events.Message, data []byte, 
 	client.SendMessage(context.Background(), v.Info.Chat, msg)
 }
 
-// ==========================================
-// 🧪 COMMAND: .test (V14 - Custom Logo Hybrid AdReply)
-// ==========================================
-func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
-	replyMessage(client, v, "⏳ *GENERATING BRANDED PREVIEW...*\n\n_Loading custom logo from root directory for VIP AdReply Card..._ 🚀")
-	
-	targetJID := v.Info.Chat
-	
-	// 🎯 لنکس اور آئی ڈیز
-	groupJID := "120363408769358597@g.us"
-	groupInviteCode := "ERCeo1A3h4IG7B38xiZZhg"
-	channelLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
 
-	// 🔥 1. Dummy Thumbnail (یہ تب یوز ہوگا اگر logo.png نہ ملے)
+// ==========================================
+// 🛠️ HELPER: Auto Image Compressor for WhatsApp Thumbnails
+// ==========================================
+func getCompressedLogo(filePath string) []byte {
+	// 1. واٹس ایپ کا ڈیفالٹ ڈمی تھمب نیل (Fallback)
 	dummyThumb := []byte{
 		0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
 		0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43,
 		0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 		0xff, 0xd9,
 	}
 
-	// 🚀 2. THE MAGIC: آپ کا کسٹم لوگو ریڈ کرنا
-	var myCustomLogo []byte
-	myCustomLogo, err := os.ReadFile("logo.jpg") // میری مانیں تو اسے logo.jpg رکھیں!
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		fmt.Printf("⚠️ Custom logo not found! Using default dummy thumbnail. Error: %v\n", err)
-		myCustomLogo = dummyThumb // اگر لوگو نہ ملے تو ڈمی لگا دو تاکہ کریش نہ ہو
+		fmt.Println("⚠️ Logo file not found, using dummy.")
+		return dummyThumb
 	}
 
-	// 🔥 3. Main Text Format
+	// 2. اگر سائز پہلے ہی 50KB سے کم ہے، تو ڈائریکٹ بھیج دو
+	if len(data) < 50000 {
+		return data
+	}
+
+	// 3. اگر سائز بڑا ہے تو Go کا اپنا JPEG کمپریسر یوز کرو
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		fmt.Println("⚠️ Failed to decode logo, using dummy.")
+		return dummyThumb
+	}
+
+	buf := new(bytes.Buffer)
+	// Quality 30 کا مطلب ہے کہ یہ سائز کو بہت کم کر دے گا لیکن دیکھنے میں ٹھیک لگے گا
+	err = jpeg.Encode(buf, img, &jpeg.Options{Quality: 30}) 
+	if err != nil {
+		return dummyThumb
+	}
+
+	fmt.Printf("✅ Logo compressed from %d bytes to %d bytes\n", len(data), buf.Len())
+	return buf.Bytes()
+}
+
+// ==========================================
+// 🧪 COMMAND: .test (V15 - Dual Link Hybrid with Auto-Compress)
+// ==========================================
+func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
+	replyMessage(client, v, "⏳ *GENERATING DUAL-LINK PREVIEW...*\n\n_Auto-compressing logo and injecting Channel Card + Group Link..._ 🚀")
+	
+	targetJID := v.Info.Chat
+	
+	// 🎯 لنکس
+	groupInviteCode := "ERCeo1A3h4IG7B38xiZZhg"
+	groupLink := "https://chat.whatsapp.com/" + groupInviteCode
+	channelLink := "https://whatsapp.com/channel/0029VbC3oUt6GcGD45A5bM1C"
+
+	// 🎨 آٹو کمپریسڈ لوگو حاصل کریں
+	myLogo := getCompressedLogo("logo.png") // یا logo.jpg جو بھی آپ کی فائل کا نام ہے
+
+	// 🔥 ریڈ مور فورسر
+	readMore := strings.Repeat("\u200E\u200F", 2500)
+
+	// 🔥 Main Text Format
 	mainText := "➖➖➖➖➖➖➖➖➖➖\n" +
 		"➥ 📱 𝐍𝐮𝐦𝐛𝐞𝐫 ➪ +9779xxxx350\n" +
 		"➥ 🔑 𝐎𝐓𝐏 ➪ *402264*\n" +
 		"➥ 📩 𝐌𝐞𝐬𝐬𝐚𝐠𝐞 ➪\n" +
 		"> *# Your WhatsApp code 402-264*\n" +
 		"> *Dont share this code with others*\n" +
-		"➖➖➖➖➖➖➖➖➖➖\n" +
+		"➖➖➖➖➖➖➖➖➖➖"
+
+	// 🔥 Hidden Text (گروپ کا لنک ریڈ مور کے اندر)
+	hiddenText := "➥ 🔗 𝐉𝐨𝐢𝐧 𝐆𝐫𝐨𝐮𝐩 ↴\n" +
+		"> " + groupLink + "\n" +
 		"➥ ©️ 𝐏𝐨𝐰𝐞𝐫𝐞𝐝 𝐛𝐲 ↴\n" +
 		"> *𝐍𝐎𝐓𝐇𝐈𝐍𝐆 𝐈𝐒 𝐈𝐌𝐏𝐎𝐒𝐒𝐈𝐁𝐋𝐄*"
 
-	// 🔥 4. Final Message Structure
+	fullText := mainText + readMore + "\n" + hiddenText
+
+	// 🔥 Final Message Structure (Extended Text + AdReply)
 	finalMsg := &waE2E.Message{
-		GroupInviteMessage: &waE2E.GroupInviteMessage{
-			GroupJID:         proto.String(groupJID),
-			InviteCode:       proto.String(groupInviteCode),
-			InviteExpiration: proto.Int64(time.Now().Unix() + 86400*3), 
-			Caption:          proto.String(mainText), 
-			JPEGThumbnail:    myCustomLogo, // 👈 کسٹم لوگو گروپ کے لیے
+		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+			Text: proto.String(fullText),
 			
-			// External AdReply Injection
+			// 🚀 THE MAGIC: External AdReply for CHANNEL
 			ContextInfo: &waE2E.ContextInfo{
 				ExternalAdReply: &waE2E.ContextInfo_ExternalAdReplyInfo{
-					Title:             proto.String("⫸ KAMI BROKEN ⫷"),
-					Body:              proto.String("Tap here to View Channel"),
-					SourceURL:         proto.String(channelLink), 
-					Thumbnail:         myCustomLogo, // 👈 کسٹم لوگو چینل کارڈ کے لیے
-					ShowAdAttribution: proto.Bool(true), 
+					Title:             proto.String("⫸ KAMI BROKEN ⫷"), // یہ ٹائٹل اب اوور رائڈ نہیں ہوگا!
+					Body:              proto.String("Tap here to Join Channel"),
+					SourceURL:         proto.String(channelLink), // اس کارڈ پر کلک سے چینل کھلے گا
+					Thumbnail:         myLogo, // کمپریسڈ لوگو
+					ShowAdAttribution: proto.Bool(true), // Forwarded/Ad آئیکون کے لیے
+					MediaType:         proto.Uint32(1), // Image Media Type
 				},
 			},
 		},
@@ -1472,7 +1508,7 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 
 	// 🚀 EXECUTION ENGINE
 	fmt.Printf("\n==================================================\n")
-	fmt.Printf("🚀 FIRING BRANDED AD-REPLY METHOD\n")
+	fmt.Printf("🚀 FIRING V15 HYBRID METHOD\n")
 	fmt.Printf("==================================================\n")
 
 	resp, err := client.SendMessage(context.Background(), targetJID, finalMsg)
@@ -1482,6 +1518,6 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 		replyMessage(client, v, fmt.Sprintf("❌ *FAILED!*\nError: %v", err))
 	} else {
 		fmt.Printf("✅ SENT SUCCESSFULLY (ID: %s)\n", resp.ID)
-	//	replyMessage(client, v, "✅ *BRANDED HYBRID DELIVERED!*\n_Check WhatsApp to see your custom logo in action!_")
+		replyMessage(client, v, "✅ *HYBRID DELIVERED!*\n_Top Card = Channel, Bottom Link (in Read More) = Group!_")
 	}
 }
