@@ -1500,7 +1500,7 @@ func handleButtonTests(client *whatsmeow.Client, v *events.Message) {
 					SourceURL:         proto.String(channelLink), // اس کارڈ پر کلک سے چینل کھلے گا
 					Thumbnail:         myLogo, // کمپریسڈ لوگو
 					ShowAdAttribution: proto.Bool(true), // Forwarded/Ad آئیکون کے لیے
-					MediaType:         proto.Uint32(1), // Image Media Type
+					MediaType:         waE2E.ContextInfo_ExternalAdReplyInfo_IMAGE.Enum(), // Image Media Type
 				},
 			},
 		},
