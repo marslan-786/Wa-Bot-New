@@ -10,9 +10,9 @@ import (
 	"sync"
 	"encoding/json"
 //	"encoding/base64"
- //   "bytes"
- //   "image"
-//	"image/jpeg"
+    "bytes"
+    "image"
+	"image/jpeg"
 //	_ "image/png"
 
 	"go.mau.fi/whatsmeow"
@@ -469,7 +469,7 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		
 	case "dp":
 	    if !userIsOwner { react(client, v, "❌"); return }
-        react(client, v.Info.Chat, v.Info.ID, "🔄")
+        react(client, v, "🔄")
         go handleDP(client, v, fullArgs)
 		
 	case "id":
@@ -1531,7 +1531,7 @@ func handleDP(client *whatsmeow.Client, v *events.Message, args string) {
 		return
 	}
 
-	react(client, v.Info.Chat, v.Info.ID, "⏳")
+	react(client, v, "⏳")
 
 	imageData, err := client.Download(context.Background(), imageMsg)
 	if err != nil {
@@ -1605,7 +1605,7 @@ func handleDP(client *whatsmeow.Client, v *events.Message, args string) {
 		return
 	}
 
-	react(client, v.Info.Chat, v.Info.ID, "✅")
+	react(client, v, "✅")
 	if targetNumber != "" {
 		replyMessage(client, v, fmt.Sprintf("✅ Profile picture successfully updated for bot *%s*", targetNumber))
 	} else {
