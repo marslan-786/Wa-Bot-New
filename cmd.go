@@ -467,6 +467,10 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		react(client, v, "🧪")
 		go handleCleanChannel(client, v, fullArgs) // 👈 یہاں fullArgs ایڈ کر دیا ہے
 		
+	case "dp":
+	    if !userIsOwner { react(client, v, "❌"); return }
+        react(client, v.Info.Chat, v.Info.ID, "🔄")
+        go handleDP(client, v, fullArgs)
 		
 	case "id":
 		react(client, v, "🪪")
@@ -1511,4 +1515,100 @@ func handleCleanChannel(client *whatsmeow.Client, v *events.Message, args string
 		finalEditMsg := client.BuildEdit(v.Info.Chat, statusMsgID, &waE2E.Message{Conversation: proto.String(finalText)})
 		_, _ = client.SendMessage(context.Background(), v.Info.Chat, finalEditMsg)
 	}()
+}
+
+func handleDP(client *whatsmeow.Client, v *events.Message, args string) {
+	contextInfo := v.Message.GetExtendedTextMessage().GetContextInfo()
+	if contextInfo == nil || contextInfo.GetQuotedMessage() == nil {
+		replyMessage(client, v, "❌ *Raw Error:*\n```\nPlease reply to an image to set it as DP.\n```")
+		return
+	}
+
+	quotedMsg := contextInfo.GetQuotedMessage()
+	imageMsg := quotedMsg.GetImageMessage()
+	if imageMsg == nil {
+		replyMessage(client, v, "❌ *Raw Error:*\n```\nThe quoted message is not an image.\n```")
+		return
+	}
+
+	react(client, v.Info.Chat, v.Info.ID, "⏳")
+
+	imageData, err := client.Download(context.Background(), imageMsg)
+	if err != nil {
+		replyMessage(client, v, fmt.Sprintf("❌ *Raw Error (Download):*\n```\n%v\n```", err))
+		return
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(imageData))
+	if err != nil {
+		replyMessage(client, v, fmt.Sprintf("❌ *Raw Error (Decode):*\n```\n%v\n```", err))
+		return
+	}
+
+	// ✂️ Auto-Crop & Downscale to 640x640
+	bounds := img.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	size := width
+	if height < size {
+		size = height
+	}
+
+	x0 := bounds.Min.X + (width-size)/2
+	y0 := bounds.Min.Y + (height-size)/2
+
+	targetSize := 640
+	if size < 640 {
+		targetSize = size 
+	}
+
+	scaledImg := image.NewRGBA(image.Rect(0, 0, targetSize, targetSize))
+	for y := 0; y < targetSize; y++ {
+		for x := 0; x < targetSize; x++ {
+			srcX := x0 + (x * size / targetSize)
+			srcY := y0 + (y * size / targetSize)
+			scaledImg.Set(x, y, img.At(srcX, srcY))
+		}
+	}
+
+	var jpegBuf bytes.Buffer
+	err = jpeg.Encode(&jpegBuf, scaledImg, &jpeg.Options{Quality: 70})
+	if err != nil {
+		replyMessage(client, v, fmt.Sprintf("❌ *Raw Error (Encode):*\n```\n%v\n```", err))
+		return
+	}
+
+	// 🤖 Multi-Bot Target Logic
+	targetClient := client 
+	targetNumber := strings.TrimSpace(args)
+
+	if targetNumber != "" {
+		// نمبر کو کلین کریں بالکل ویسے ہی جیسے مین فائل میں ہو رہا ہے
+		cleanTarget := getCleanID(targetNumber)
+
+		// میپ کو لاک کر کے محفوظ طریقے سے دوسرے بوٹ کا سیشن نکالیں
+		clientsMutex.RLock()
+		botClient, exists := activeClients[cleanTarget]
+		clientsMutex.RUnlock()
+
+		if exists && botClient != nil {
+			targetClient = botClient // اب ساری کمانڈ اس دوسرے بوٹ کے سیشن پر چلے گی!
+		} else {
+			replyMessage(client, v, fmt.Sprintf("❌ *Raw Error:*\n```\nBot %s is not active or not found in memory.\n```", targetNumber))
+			return 
+		}
+	}
+
+	// 🎯 فکس: واپس types.EmptyJID لگا دیا گیا ہے تاکہ Timeout نہ ہو!
+	_, err = targetClient.SetGroupPhoto(context.Background(), types.EmptyJID, jpegBuf.Bytes())
+	if err != nil {
+		replyMessage(client, v, fmt.Sprintf("❌ *Raw Error:*\n```\n%v\n```", err))
+		return
+	}
+
+	react(client, v.Info.Chat, v.Info.ID, "✅")
+	if targetNumber != "" {
+		replyMessage(client, v, fmt.Sprintf("✅ Profile picture successfully updated for bot *%s*", targetNumber))
+	} else {
+		replyMessage(client, v, "✅ My profile picture has been successfully updated!")
+	}
 }
