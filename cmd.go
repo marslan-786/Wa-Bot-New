@@ -367,6 +367,9 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		react(client, v, "📽️")
 		go handleVideoSearch(client, v, fullArgs)
     
+    case "dwn":
+    	react(client, v, "⬇️")
+    	go handleYTDownload(client, v, rawArgs)
     	// 🌐 PUBLIC/GENERAL COMMANDS
 	case "pair":
 		// یہاں اونر چیک نہیں ہے! کوئی بھی یوز کر سکتا ہے

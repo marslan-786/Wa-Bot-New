@@ -86,6 +86,7 @@ COPY tiktok_search.py ./tiktok_search.py
 COPY index.html ./index.html
 COPY pic.png ./pic.png
 COPY rvc_engine.py ./rvc_engine.py
+COPY youtube_cookies.json ./youtube_cookies.json
 
 RUN mkdir -p store logs
 ENV PORT=8080
