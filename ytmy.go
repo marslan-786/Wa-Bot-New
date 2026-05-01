@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,7 +31,7 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 		replyMessage(client, v, "❌ *System Error:* Failed to create temporary directory.")
 		return
 	}
-	// This will safely delete the downloaded file and folder AFTER uploadAndSendFile finishes
+	// This will safely delete the downloaded file and folder AFTER function finishes
 	defer os.RemoveAll(tempDir)
 
 	// Android User-Agent to prevent blocks
@@ -36,8 +39,8 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 
 	outputTemplate := filepath.Join(tempDir, "%(id)s.%(ext)s")
 
-	// Smart Format: 360p Hindi -> 360p Default -> Best 360p
-	formatString := "bestvideo[height<=360]+bestaudio[language*=hi]/bestvideo[height<=360]+bestaudio/best[height<=360]"
+	// Smart Format: Strictly H.264 (avc1)
+	formatString := "bestvideo[height<=360][vcodec^=avc1]+bestaudio[language*=hi][ext=m4a]/bestvideo[height<=360][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=360][vcodec^=avc1]"
 
 	// Command execution
 	cmd := exec.Command("yt-dlp",
@@ -46,7 +49,8 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 		"--merge-output-format", "mp4",
 		"-f", formatString,
 		"--user-agent", userAgent,
-		"--postprocessor-args", "ffmpeg:-movflags +faststart", // 🔥 THE MAGIC FIX: Makes it playable in WhatsApp
+		// 🔥 Force FFmpeg to make it WhatsApp friendly
+		"--postprocessor-args", "ffmpeg:-c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart", 
 		"--output", outputTemplate,
 		videoURL,
 	)
@@ -78,10 +82,63 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 	}
 
 	react(client, v, "📤")
+	replyMessage(client, v, "📤 Uploading file to server...")
 
-	// 📤 CORE UPLOAD FUNCTION 
-	// Sending false for isAudio, partNum 1, totalParts 1
-	uploadAndSendFile(client, v, downloadedPath, "YouTube Video", false, 1, 1)
+	// ---------------------------------------------------------
+	// 📤 CORE UPLOAD FUNCTION (Custom Catbox API via HTTP POST)
+	// ---------------------------------------------------------
 	
+	fileToUpload, err := os.Open(downloadedPath)
+	if err != nil {
+		replyMessage(client, v, "❌ *System Error:* Failed to read downloaded file.")
+		return
+	}
+	defer fileToUpload.Close()
+
+	// Prepare multipart form data
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	
+	// Catbox standard parameters
+	_ = writer.WriteField("reqtype", "fileupload")
+	
+	part, err := writer.CreateFormFile("fileToUpload", filepath.Base(downloadedPath))
+	if err == nil {
+		_, _ = io.Copy(part, fileToUpload)
+	}
+	writer.Close()
+
+	// HTTP POST request to your API
+	req, err := http.NewRequest("POST", "https://catbox-production-6705.up.railway.app/upload", body)
+	if err != nil {
+		replyMessage(client, v, "❌ *Upload Error:* Request creation failed.")
+		return
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		replyMessage(client, v, fmt.Sprintf("❌ *API Error:* %v", err))
+		return
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		replyMessage(client, v, "❌ *System Error:* Failed to read API response.")
+		return
+	}
+
+	// Check if upload was successful
+	if resp.StatusCode != http.StatusOK {
+		replyMessage(client, v, fmt.Sprintf("❌ *Upload Failed:* Server returned status %d\n%s", resp.StatusCode, string(respBytes)))
+		return
+	}
+
+	uploadedURL := strings.TrimSpace(string(respBytes))
+
+	// Send the received link to WhatsApp
+	replyMessage(client, v, fmt.Sprintf("✅ *Video Uploaded Successfully!*\n\n🔗 *Watch / Download:* %s", uploadedURL))
 	react(client, v, "✅")
 }
