@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"go.mau.fi/whatsmeow"
+    
+    "go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
@@ -18,13 +18,14 @@ import (
 // کوئی کوکیز نہیں، صرف yt-dlp + اینڈرائیڈ ہیڈرز
 
 // ========== مین ہینڈلر (.dwn) ==========
+// ========== مین ہینڈلر (.dwn) ==========
 func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL string) {
 	if videoURL == "" {
 		replyMessage(client, v, "❌ لنک فراہم کریں!\nمثال: `.dwn https://youtu.be/xxxx`")
 		return
 	}
 
-	replyMessage(client, v, "⏳ yt-dlp سے ہندی آڈیو کے ساتھ ڈاؤن لوڈ کر رہا ہوں...")
+	replyMessage(client, v, "⏳ 360p میں ویڈیو ڈاؤن لوڈ ہو رہی ہے (ہندی آڈیو کے ساتھ اگر دستیاب ہوئی)...")
 
 	// عارضی ڈائریکٹری
 	tempDir, err := os.MkdirTemp("", "ytdlp_*")
@@ -39,12 +40,18 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 
 	outputTemplate := filepath.Join(tempDir, "%(id)s.%(ext)s")
 
-	// پہلے ہندی آڈیو کے ساتھ کوشش
+	// ---- اصل جادو یہاں ہے ----
+	// یہ لائن yt-dlp کو بتاتی ہے: 
+	// 1. سب سے پہلے 360p یا اس سے کم کی ویڈیو اور ہندی آڈیو کی ID ڈھونڈو اور ملاؤ۔
+	// 2. اگر ہندی آڈیو نہ ملے، تو 360p ویڈیو کے ساتھ ڈیفالٹ آڈیو ملاؤ۔
+	// 3. اگر الگ الگ نہ ملیں، تو جو بھی بیسٹ 360p فارمیٹ ہو وہ ڈاؤن لوڈ کر لو۔
+	formatString := "bestvideo[height<=360]+bestaudio[language*=hi]/bestvideo[height<=360]+bestaudio/best[height<=360]"
+
 	cmd := exec.Command("yt-dlp",
 		"--no-warnings",
 		"--no-playlist",
 		"--merge-output-format", "mp4",
-		"-f", "bestvideo[height<=1080]+bestaudio[language=hi]",
+		"-f", formatString,
 		"--user-agent", userAgent,
 		"--output", outputTemplate,
 		videoURL,
@@ -54,29 +61,8 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	if err != nil {
-		// اگر ہندی نہ ملا ہو تو اوریجنل آڈیو کے ساتھ
-		if strings.Contains(stderr.String(), "Requested format not available") {
-			replyMessage(client, v, "⚠️ ہندی آڈیو دستیاب نہیں۔ اوریجنل آڈیو کے ساتھ ڈاؤن لوڈ کر رہا ہوں...")
-			cmd = exec.Command("yt-dlp",
-				"--no-warnings",
-				"--no-playlist",
-				"--merge-output-format", "mp4",
-				"-f", "bestvideo[height<=1080]+bestaudio",
-				"--user-agent", userAgent,
-				"--output", outputTemplate,
-				videoURL,
-			)
-			stderr.Reset()
-			cmd.Stderr = &stderr
-			err = cmd.Run()
-			if err != nil {
-				replyMessage(client, v, fmt.Sprintf("❌ yt-dlp ایرر:\n%s", stderr.String()))
-				return
-			}
-		} else {
-			replyMessage(client, v, fmt.Sprintf("❌ yt-dlp ایرر:\n%s", stderr.String()))
-			return
-		}
+		replyMessage(client, v, fmt.Sprintf("❌ yt-dlp ایرر:\n%s", stderr.String()))
+		return
 	}
 
 	// ڈاؤن لوڈ شدہ فائل تلاش کریں
@@ -88,6 +74,7 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 			break
 		}
 	}
+	
 	if downloadedPath == "" {
 		replyMessage(client, v, "❌ ڈاؤن لوڈ شدہ فائل نہیں ملی")
 		return
@@ -100,7 +87,7 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 		return
 	}
 	fileSize := fileInfo.Size()
-	const maxVideoSize int64 = 50 * 1024 * 1024
+	const maxVideoSize int64 = 50 * 1024 * 1024 // 50MB لیمٹ
 
 	finalData, err := os.ReadFile(downloadedPath)
 	if err != nil {
@@ -109,7 +96,7 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 	}
 
 	if fileSize > maxVideoSize {
-		// ڈاکومنٹ
+		// ڈاکومنٹ کے طور پر اپلوڈ
 		uploadResp, err := client.Upload(context.Background(), finalData, whatsmeow.MediaDocument)
 		if err != nil {
 			replyMessage(client, v, fmt.Sprintf("❌ واٹس ایپ اپلوڈ ایرر (Document): %v", err))
@@ -124,13 +111,13 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 				FileEncSHA256: uploadResp.FileEncSHA256,
 				FileSHA256:    uploadResp.FileSHA256,
 				FileLength:    proto.Uint64(uint64(fileSize)),
-				FileName:      proto.String("Video_Hindi.mp4"),
+				FileName:      proto.String("Downloaded_Video.mp4"),
 			},
 		}
 		client.SendMessage(context.Background(), v.Info.Chat, msg)
-		replyMessage(client, v, fmt.Sprintf("✅ ویڈیو بطور ڈاکومنٹ بھیج دی گئی (سائز: %.1f MB)", float64(fileSize)/(1024*1024)))
+		replyMessage(client, v, fmt.Sprintf("✅ ویڈیو سائز بڑا تھا اس لیے بطور ڈاکومنٹ بھیج دی گئی (سائز: %.1f MB)", float64(fileSize)/(1024*1024)))
 	} else {
-		// ویڈیو
+		// نارمل ویڈیو کے طور پر اپلوڈ
 		uploadResp, err := client.Upload(context.Background(), finalData, whatsmeow.MediaVideo)
 		if err != nil {
 			replyMessage(client, v, fmt.Sprintf("❌ واٹس ایپ اپلوڈ ایرر (Video): %v", err))
@@ -148,6 +135,6 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 			},
 		}
 		client.SendMessage(context.Background(), v.Info.Chat, msg)
-		replyMessage(client, v, "✅ ہندی میں ویڈیو ڈاؤن لوڈ ہو گئی!")
+		replyMessage(client, v, "✅ 360p میں ویڈیو کامیابی سے ڈاؤن لوڈ ہو گئی!")
 	}
 }
