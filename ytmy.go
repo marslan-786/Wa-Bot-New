@@ -39,8 +39,8 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 
 	outputTemplate := filepath.Join(tempDir, "%(id)s.%(ext)s")
 
-	// Smart Format: Strictly H.264 (avc1)
-	formatString := "bestvideo[height<=360][vcodec^=avc1]+bestaudio[language*=hi][ext=m4a]/bestvideo[height<=360][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=360][vcodec^=avc1]"
+// Smart Format: 360p, STRICTLY prioritize Hindi audio without forcing .m4a extension
+	formatString := "bestvideo[height<=360][vcodec^=avc1]+bestaudio[language*=hi]/bestvideo[height<=360][vcodec^=avc1]+bestaudio/best[height<=360][vcodec^=avc1]"
 
 	// Command execution
 	cmd := exec.Command("yt-dlp",
@@ -48,6 +48,8 @@ func handleYTDownload(client *whatsmeow.Client, v *events.Message, videoURL stri
 		"--no-playlist",
 		"--merge-output-format", "mp4",
 		"-f", formatString,
+		// 🔥 Extra push: Forces YouTube extractor to prefer Hindi language track 
+		"--extractor-args", "youtube:lang=hi",
 		"--user-agent", userAgent,
 		// 🔥 Force FFmpeg to make it WhatsApp friendly
 		"--postprocessor-args", "ffmpeg:-c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart", 
