@@ -370,6 +370,10 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
     case "dwn":
     	react(client, v, "⬇️")
     	go handleYTDownload(client, v, rawArgs)
+    	
+    case "myapi":
+    	react(client, v, "⬇️")
+    	go handleAPIDownload(client, v, rawArgs)
     	// 🌐 PUBLIC/GENERAL COMMANDS
 	case "pair":
 		// یہاں اونر چیک نہیں ہے! کوئی بھی یوز کر سکتا ہے

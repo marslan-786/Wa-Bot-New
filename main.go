@@ -128,6 +128,7 @@ func main() {
 	initDB()
 	initSettingsDB()
 	initGroupDB()
+	loadCookies("youtube_cookies.json")
 
 	// سیشنز چلائیں (یہ فنکشن اب خود ہر سیشن کے لیے سنک لوپ شروع کرے گا)
 	RunAllSessions()
