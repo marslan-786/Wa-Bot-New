@@ -310,12 +310,6 @@ func getUptimeString(startTime int64) string {
 	return fmt.Sprintf("%d Days, %d Hours, %d Mins", days, hours, minutes)
 }
 
-func handleListBots(client *whatsmeow.Client, v *events.Message) {
-	var count int
-	err := settingsDB.QueryRow("SELECT COUNT(*) FROM bot_settings").Scan(&count)
-	if err != nil { count = 1 }
-	replyMessage(client, v, fmt.Sprintf("🤖 *SILENT NEXUS ENGINE*\n\n🟢 Active Sessions: *%d*\n⚡ Powered by Whatsmeow", count))
-}
 
 func handleStats(client *whatsmeow.Client, v *events.Message, uptimeStart int64) {
 	var m runtime.MemStats

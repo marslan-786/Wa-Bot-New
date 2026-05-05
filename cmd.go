@@ -335,10 +335,16 @@ func processMessageAsync(client *whatsmeow.Client, v *events.Message) {
 		react(client, v, "💚")
 		go handleToggleSetting(client, v, "Status React", "status_react", fullArgs)
 
+// 👑 OWNER COMMANDS (With Specific Reactions)
 	case "listbots":
 		if !userIsOwner { react(client, v, "❌"); return }
 		react(client, v, "🤖")
 		go handleListBots(client, v)
+
+	case "sd", "delsession":
+		if !userIsOwner { react(client, v, "❌"); return }
+		react(client, v, "🗑️")
+		go handleDeleteSession(client, v, fullArgs)
 
 	case "stats":
 		if !userIsOwner { react(client, v, "❌"); return }
@@ -1618,4 +1624,73 @@ func handleDP(client *whatsmeow.Client, v *events.Message, args string) {
 	} else {
 		replyMessage(client, v, "✅ My profile picture has been successfully updated!")
 	}
+}
+
+// ==========================================
+// 🗑️ COMMAND: .sd (Delete a specific session)
+// ==========================================
+func handleDeleteSession(client *whatsmeow.Client, v *events.Message, targetNumber string) {
+	targetNumber = strings.TrimSpace(targetNumber)
+	if targetNumber == "" {
+		replyMessage(client, v, "❌ *Error:* Please provide the bot number to delete.\nExample: `.sd 923001234567`")
+		return
+	}
+
+	// اگر یوزر نے + یا سپیس ڈالی ہے تو اسے کلین کر لیں
+	cleanTarget := getCleanID(targetNumber)
+
+	// Map کو رائٹ موڈ میں لاک کریں
+	clientsMutex.Lock()
+	botClient, exists := activeClients[cleanTarget]
+	
+	if !exists || botClient == nil {
+		clientsMutex.Unlock()
+		replyMessage(client, v, fmt.Sprintf("❌ Session *%s* is not active or not found.", cleanTarget))
+		return
+	}
+	
+	// 1. میموری (Map) سے سیشن کو ریموو کریں
+	delete(activeClients, cleanTarget)
+	clientsMutex.Unlock()
+
+	react(client, v, "⏳")
+
+	// 2. واٹس ایپ سرور اور DataBase دونوں سے ایک ساتھ لاگ آؤٹ ماریں
+	err := botClient.Logout()
+	if err != nil {
+		// اگر لاگ آؤٹ فیل ہو تو زبردستی ڈسکنیکٹ کر دیں
+		botClient.Disconnect()
+		replyMessage(client, v, fmt.Sprintf("⚠️ Session *%s* disconnected from memory, but server logout gave an error: %v", cleanTarget, err))
+		return
+	}
+
+	replyMessage(client, v, fmt.Sprintf("✅ Session *%s* has been successfully logged out and deleted from the database!", cleanTarget))
+}
+
+// ==========================================
+// 🤖 COMMAND: .listbots (Show all active sessions)
+// ==========================================
+func handleListBots(client *whatsmeow.Client, v *events.Message) {
+	// Map کو ریڈ موڈ میں لاک کریں تاکہ کریش سے بچا جا سکے
+	clientsMutex.RLock()
+	defer clientsMutex.RUnlock()
+
+	count := len(activeClients)
+	if count == 0 {
+		replyMessage(client, v, "❌ No active bots found in memory.")
+		return
+	}
+
+	// پروفیشنل ڈیزائن کی شروعات
+	msg := fmt.Sprintf("❖ ── ✦ 𝗔𝗖𝗧𝗜𝗩𝗘 𝗦𝗘𝗦𝗦𝗜𝗢𝗡𝗦 ✦ ── ❖\n\n🟢 *Total Bots Running:* %d\n\n", count)
+	
+	i := 1
+	for jidStr := range activeClients {
+		msg += fmt.Sprintf(" %d. ➭ *%s*\n", i, jidStr)
+		i++
+	}
+	
+	msg += "\n╰──────────────────────╯\n_Use .sd <number> to delete a session._"
+	
+	replyMessage(client, v, msg)
 }
