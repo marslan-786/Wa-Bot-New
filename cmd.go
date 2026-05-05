@@ -1656,7 +1656,8 @@ func handleDeleteSession(client *whatsmeow.Client, v *events.Message, targetNumb
 	react(client, v, "⏳")
 
 	// 2. واٹس ایپ سرور اور DataBase دونوں سے ایک ساتھ لاگ آؤٹ ماریں
-	err := botClient.Logout()
+// 2. واٹس ایپ سرور اور DataBase دونوں سے ایک ساتھ لاگ آؤٹ ماریں
+	err := botClient.Logout(context.Background()) // 👈 بس یہاں context.Background() ایڈ کرنا ہے
 	if err != nil {
 		// اگر لاگ آؤٹ فیل ہو تو زبردستی ڈسکنیکٹ کر دیں
 		botClient.Disconnect()
